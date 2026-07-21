@@ -1,0 +1,204 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+html[data-theme='dark'] {
+  /* RGB kanal değerleri — Tailwind alpha ile uyumlu */
+  --ink-bg: 14 14 20;
+  --ink-deep: 18 18 26;
+  --ink-panel: 23 23 31;
+  --ink-elevated: 30 30 40;
+  --ink-border: 42 42 54;
+  --ink-text: 242 242 245;
+  --ink-muted: 154 154 168;
+  --seal: 255 77 77;
+  --seal-soft: 255 77 77;
+  color-scheme: dark;
+}
+
+html[data-theme='light'] {
+  --ink-bg: 243 243 246;
+  --ink-deep: 255 255 255;
+  --ink-panel: 255 255 255;
+  --ink-elevated: 247 247 250;
+  --ink-border: 226 226 234;
+  --ink-text: 22 22 29;
+  --ink-muted: 107 107 122;
+  --seal: 225 29 72;
+  --seal-soft: 225 29 72;
+  color-scheme: light;
+}
+
+:root {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: rgb(var(--ink-bg));
+  color: rgb(var(--ink-text));
+}
+
+html[data-compact='1'] .panel {
+  padding: 0.65rem;
+}
+html[data-compact='1'] .panel__head {
+  margin-bottom: 0.4rem;
+}
+html[data-compact='1'] .panel__title {
+  font-size: 0.78rem;
+}
+
+/* Sol panel kaydırma çubuğu */
+.app-shell aside.custom-scroll,
+aside.custom-scroll {
+  scrollbar-gutter: stable;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: rgb(var(--ink-bg));
+}
+
+.font-display {
+  font-family: Syne, 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+.bg-mesh {
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(255, 77, 77, 0.16), transparent 55%),
+    radial-gradient(700px 420px at 90% 0%, rgba(255, 170, 80, 0.08), transparent 50%),
+    radial-gradient(600px 400px at 50% 100%, rgba(80, 100, 255, 0.06), transparent 55%),
+    linear-gradient(180deg, rgb(var(--ink-bg)) 0%, rgb(var(--ink-bg)) 100%);
+}
+
+html[data-theme='light'] .bg-mesh {
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(225, 29, 72, 0.1), transparent 55%),
+    radial-gradient(700px 420px at 90% 0%, rgba(255, 170, 80, 0.08), transparent 50%),
+    linear-gradient(180deg, #f7f7fa 0%, #f0f0f4 100%);
+}
+
+html[data-theme='light'] .noise-overlay {
+  opacity: 0.02;
+}
+
+/* Light temada uyarı metni okunabilir kalsın */
+html[data-theme='light'] .text-amber-100 {
+  color: rgb(120 53 15);
+}
+
+.noise-overlay {
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-ink-border bg-ink-panel/90 p-3 shadow-[0_8px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm;
+  }
+
+  .panel__head {
+    @apply mb-2 flex items-center justify-between gap-2;
+  }
+
+  .panel__title {
+    @apply font-display text-[13px] font-bold tracking-wide text-ink-text;
+  }
+
+  .preview-panel {
+    @apply self-start;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center rounded-lg bg-seal px-3.5 py-2 text-sm font-semibold text-white shadow-[0_6px_18px_rgba(255,77,77,0.25)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center rounded-lg border border-ink-border bg-ink-elevated px-3.5 py-2 text-sm font-medium text-ink-text transition hover:border-seal/40 hover:bg-ink-panel disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center rounded-lg border border-transparent px-3.5 py-2 text-sm font-medium text-ink-muted transition hover:border-ink-border hover:bg-ink-elevated hover:text-ink-text disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center rounded-lg border border-red-500/40 bg-red-500/15 px-3.5 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/25;
+  }
+
+  .btn-icon {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ink-border bg-ink-deep text-ink-muted transition hover:border-seal/40 hover:text-seal;
+  }
+
+  .select {
+    @apply w-full rounded-lg border border-ink-border bg-ink-deep px-2.5 py-1.5 text-sm text-ink-text outline-none transition focus:border-seal/50 focus:ring-1 focus:ring-seal/30;
+  }
+
+  .range {
+    @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-deep accent-seal;
+  }
+
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    background: rgb(var(--seal));
+    box-shadow: 0 0 0 3px rgb(var(--seal) / 0.2);
+  }
+
+  .range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 9999px;
+    background: rgb(var(--seal));
+  }
+
+  .logo-drop {
+    min-height: 88px;
+  }
+
+  .custom-scroll::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  .custom-scroll::-webkit-scrollbar-thumb {
+    background: rgb(var(--ink-border));
+    border-radius: 999px;
+  }
+
+  .custom-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .animate-pulse-soft {
+    animation: pulse-soft 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
