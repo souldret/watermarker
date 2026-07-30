@@ -48,8 +48,32 @@ export interface TextWatermark {
   position: WatermarkPosition;
 }
 
+/** Serbest piksel konum (interaktif önizlemeden sürükle/tıkla) */
+export interface CustomXY {
+  /** 0–1 oranı (görsel genişliğine göre) */
+  x: number;
+  /** 0–1 oranı (görsel yüksekliğine göre) */
+  y: number;
+}
+
+/** İkinci logo ayarları */
+export interface Logo2Settings {
+  /** Aktif mi */
+  enabled: boolean;
+  positions: WatermarkPosition[];
+  /** Serbest koordinat (null = ızgara konumu kullan) */
+  customXY: CustomXY | null;
+  sizeMode: SizeMode;
+  sizePercent: number;
+  sizePx: number;
+  opacity: number;
+  rotation: number;
+}
+
 export interface WatermarkSettings {
   positions: WatermarkPosition[];
+  /** Logo 1 için serbest koordinat (null = ızgara kullan) */
+  logo1CustomXY: CustomXY | null;
   sizeMode: SizeMode;
   sizePercent: number;
   sizePx: number;
@@ -67,6 +91,8 @@ export interface WatermarkSettings {
   textWatermark: TextWatermark;
   /** MB cinsinden uyarı eşiği */
   largeFileMb: number;
+  /** İkinci logo ayarları */
+  logo2: Logo2Settings;
 }
 
 export interface AppPreset {
@@ -163,8 +189,20 @@ export const DEFAULT_TEXT_WATERMARK: TextWatermark = {
   position: 'bl',
 };
 
+export const DEFAULT_LOGO2: Logo2Settings = {
+  enabled: false,
+  positions: ['bl'],
+  customXY: null,
+  sizeMode: 'percent',
+  sizePercent: 10,
+  sizePx: 150,
+  opacity: 0.55,
+  rotation: 0,
+};
+
 export const DEFAULT_SETTINGS: WatermarkSettings = {
   positions: ['br'],
+  logo1CustomXY: null,
   sizeMode: 'percent',
   sizePercent: 12,
   sizePx: 180,
@@ -180,6 +218,7 @@ export const DEFAULT_SETTINGS: WatermarkSettings = {
   gifPolicy: 'first_frame',
   textWatermark: { ...DEFAULT_TEXT_WATERMARK },
   largeFileMb: 25,
+  logo2: { ...DEFAULT_LOGO2 },
 };
 
 export const DEFAULT_UI_PREFS: UiPrefs = {

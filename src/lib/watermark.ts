@@ -1,4 +1,11 @@
-import type { OutputFormat, TextWatermark, WatermarkPosition, WatermarkSettings } from './types';
+import type {
+  CustomXY,
+  Logo2Settings,
+  OutputFormat,
+  TextWatermark,
+  WatermarkPosition,
+  WatermarkSettings,
+} from './types';
 import { pickSmartPosition } from './smartPosition';
 
 export interface LogoSource {
@@ -53,6 +60,7 @@ export function calcLogoSize(
   return { w, h };
 }
 
+/** Logo 1 için serbest koordinat veya ızgara pozisyonundan rect hesapla */
 export function calcLogoRect(
   imageW: number,
   imageH: number,
@@ -60,9 +68,20 @@ export function calcLogoRect(
   logoH: number,
   position: WatermarkPosition,
   settings: Pick<WatermarkSettings, 'sizeMode' | 'sizePercent' | 'sizePx' | 'marginPx'>,
+  customXY?: CustomXY | null,
 ): { x: number; y: number; w: number; h: number } {
   const { w, h } = calcLogoSize(imageW, logoW, logoH, settings);
   const m = Math.max(0, settings.marginPx);
+
+  if (customXY) {
+    // Serbest konumlandırma — merkezi tıklanan noktada
+    const cx = customXY.x * imageW;
+    const cy = customXY.y * imageH;
+    const x = Math.min(Math.max(0, cx - w / 2), Math.max(0, imageW - w));
+    const y = Math.min(Math.max(0, cy - h / 2), Math.max(0, imageH - h));
+    return { x, y, w, h };
+  }
+
   let x = m;
   let y = m;
   const row = position[0];
@@ -76,6 +95,27 @@ export function calcLogoRect(
   x = Math.min(Math.max(0, x), Math.max(0, imageW - w));
   y = Math.min(Math.max(0, y), Math.max(0, imageH - h));
   return { x, y, w, h };
+}
+
+/** Logo 2 için rect — kendi boyut/konum ayarlarından */
+export function calcLogo2Rect(
+  imageW: number,
+  imageH: number,
+  logoW: number,
+  logoH: number,
+  position: WatermarkPosition,
+  logo2: Logo2Settings,
+  marginPx: number,
+): { x: number; y: number; w: number; h: number } {
+  if (logo2.customXY) {
+    const { w, h } = calcLogoSize(imageW, logoW, logoH, logo2);
+    const cx = logo2.customXY.x * imageW;
+    const cy = logo2.customXY.y * imageH;
+    const x = Math.min(Math.max(0, cx - w / 2), Math.max(0, imageW - w));
+    const y = Math.min(Math.max(0, cy - h / 2), Math.max(0, imageH - h));
+    return { x, y, w, h };
+  }
+  return calcLogoRect(imageW, imageH, logoW, logoH, position, { ...logo2, marginPx });
 }
 
 function drawLogoAt(
@@ -138,10 +178,11 @@ function resolvePositions(
   settings: WatermarkSettings,
 ): WatermarkPosition[] {
   const base =
-    settings.positions && settings.positions.length > 0 ? [...settings.positions] : (['br'] as WatermarkPosition[]);
+    settings.positions && settings.positions.length > 0
+      ? [...settings.positions]
+      : (['br'] as WatermarkPosition[]);
   if (!settings.smartPosition) return base;
   const smart = pickSmartPosition(ctx, width, height, base);
-  // Akıllı konum seçilen adaylar arasından en iyiyi öne al
   return [smart, ...base.filter((p) => p !== smart)];
 }
 
@@ -167,9 +208,11 @@ function mimeFor(format: OutputFormat, originalName: string): { mime: string; ex
   return { mime: 'image/jpeg', ext: '.jpg' };
 }
 
+/** Tek görsele logo(lar) + metin watermark bas */
 export async function applyWatermark(
   imageFile: File,
   logo: LogoSource | null,
+  logo2: LogoSource | null,
   settings: WatermarkSettings,
 ): Promise<{ blob: Blob; mime: string; ext: string }> {
   const image = await loadImageFromFile(imageFile);
@@ -191,16 +234,37 @@ export async function applyWatermark(
   ctx.drawImage(image, 0, 0);
   if ('close' in image && typeof image.close === 'function') image.close();
 
+  // — Logo 1 —
   if (logo) {
     const positions = resolvePositions(ctx, canvas.width, canvas.height, settings);
-    // smart açıkken tek konuma bas (en boş), kapalıyken çoklu
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
-      const rect = calcLogoRect(canvas.width, canvas.height, logo.width, logo.height, pos, settings);
+      const rect = calcLogoRect(
+        canvas.width, canvas.height,
+        logo.width, logo.height,
+        pos, settings,
+        settings.logo1CustomXY,
+      );
       drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
     }
   }
 
+  // — Logo 2 —
+  if (logo2 && settings.logo2?.enabled) {
+    const l2 = settings.logo2;
+    const positions = l2.positions.length > 0 ? l2.positions : ['bl' as WatermarkPosition];
+    for (const pos of positions) {
+      const rect = calcLogo2Rect(
+        canvas.width, canvas.height,
+        logo2.width, logo2.height,
+        pos, l2,
+        settings.marginPx,
+      );
+      drawLogoAt(ctx, logo2, rect, l2.opacity, l2.rotation);
+    }
+  }
+
+  // — Metin —
   if (settings.textWatermark?.enabled) {
     drawTextWatermark(ctx, canvas.width, canvas.height, settings.textWatermark, 1);
   }
@@ -222,18 +286,19 @@ export async function applyWatermark(
   return { blob, mime, ext };
 }
 
+/** Önizleme canvas'ına watermark'ları çiz (ölçeklenmiş) */
 export function drawPreview(
   canvas: HTMLCanvasElement,
   base: CanvasImageSource,
   baseW: number,
   baseH: number,
   logo: LogoSource | null,
+  logo2: LogoSource | null,
   settings: WatermarkSettings,
   maxW = 220,
   maxH = 280,
 ): void {
   if (baseW < 1 || baseH < 1) return;
-  // Her zaman kutuya sığdır (büyütme yok / aşırı büyük canvas yok)
   const scale = Math.min(maxW / baseW, maxH / baseH, 1);
   const w = Math.max(1, Math.round(baseW * scale));
   const h = Math.max(1, Math.round(baseH * scale));
@@ -250,19 +315,33 @@ export function drawPreview(
     marginPx: settings.marginPx * scale,
     sizePx: settings.sizePx * scale,
     textWatermark: tw
-      ? {
-          ...tw,
-          fontSize: (tw.fontSize || 28) * scale,
-        }
+      ? { ...tw, fontSize: (tw.fontSize || 28) * scale }
       : settings.textWatermark,
+    logo2: settings.logo2
+      ? { ...settings.logo2, sizePx: settings.logo2.sizePx * scale }
+      : settings.logo2,
   };
 
+  // Logo 1
   if (logo) {
     const positions = resolvePositions(ctx, w, h, previewSettings);
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
-      const rect = calcLogoRect(w, h, logo.width, logo.height, pos, previewSettings);
+      const rect = calcLogoRect(
+        w, h, logo.width, logo.height, pos, previewSettings,
+        previewSettings.logo1CustomXY,
+      );
       drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
+    }
+  }
+
+  // Logo 2
+  if (logo2 && previewSettings.logo2?.enabled) {
+    const l2 = previewSettings.logo2;
+    const positions = l2.positions.length > 0 ? l2.positions : ['bl' as WatermarkPosition];
+    for (const pos of positions) {
+      const rect = calcLogo2Rect(w, h, logo2.width, logo2.height, pos, l2, previewSettings.marginPx);
+      drawLogoAt(ctx, logo2, rect, l2.opacity, l2.rotation);
     }
   }
 

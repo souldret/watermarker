@@ -14,6 +14,7 @@ export default function PreviewCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const logoSource = useAppStore((s) => s.logoSource);
+  const logo2Source = useAppStore((s) => s.logo2Source);
   const settings = useAppStore((s) => s.settings);
   const previewImageUrl = useAppStore((s) => s.previewImageUrl);
   const previewPath = useAppStore((s) => s.previewPath);
@@ -47,6 +48,7 @@ export default function PreviewCanvas() {
         img.naturalWidth,
         img.naturalHeight,
         logoSource,
+        logo2Source,
         settings,
         boxW,
         boxH,

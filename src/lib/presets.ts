@@ -1,5 +1,10 @@
-import type { AppPreset, PageFilter, WatermarkSettings } from './types';
-import { DEFAULT_PAGE_FILTER, DEFAULT_SETTINGS, DEFAULT_TEXT_WATERMARK } from './types';
+import type { AppPreset, Logo2Settings, PageFilter, WatermarkSettings } from './types';
+import {
+  DEFAULT_LOGO2,
+  DEFAULT_PAGE_FILTER,
+  DEFAULT_SETTINGS,
+  DEFAULT_TEXT_WATERMARK,
+} from './types';
 
 const STORAGE_KEY = 'watermarker.presets.v1';
 
@@ -11,6 +16,18 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function mergeLogo2(partial?: Partial<Logo2Settings> | null): Logo2Settings {
+  return {
+    ...DEFAULT_LOGO2,
+    ...partial,
+    positions:
+      partial?.positions && partial.positions.length > 0
+        ? [...partial.positions]
+        : [...DEFAULT_LOGO2.positions],
+    customXY: partial?.customXY ?? null,
+  };
+}
+
 export function mergeSettings(partial?: Partial<WatermarkSettings> | null): WatermarkSettings {
   return {
     ...DEFAULT_SETTINGS,
@@ -19,10 +36,12 @@ export function mergeSettings(partial?: Partial<WatermarkSettings> | null): Wate
       partial?.positions && partial.positions.length > 0
         ? [...partial.positions]
         : [...DEFAULT_SETTINGS.positions],
+    logo1CustomXY: partial?.logo1CustomXY ?? null,
     textWatermark: {
       ...DEFAULT_TEXT_WATERMARK,
       ...partial?.textWatermark,
     },
+    logo2: mergeLogo2(partial?.logo2),
   };
 }
 

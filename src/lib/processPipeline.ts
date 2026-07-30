@@ -52,6 +52,7 @@ function isGif(name: string): boolean {
 export interface PipelineOptions {
   chapters: ChapterJob[];
   logo: LogoSource | null;
+  logo2: LogoSource | null;
   settings: WatermarkSettings;
   pageFilter: PageFilter;
   sourceLabel: string;
@@ -185,7 +186,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
 
     try {
       result.bytesIn += job.image.file.size;
-      const { blob } = await applyWatermark(job.image.file, opts.logo, opts.settings);
+      const { blob } = await applyWatermark(job.image.file, opts.logo, opts.logo2, opts.settings);
       result.bytesOut += blob.size;
       const fileName = buildOutputFileName({
         originalName: job.image.name,

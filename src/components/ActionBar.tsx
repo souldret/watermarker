@@ -42,6 +42,7 @@ export default function ActionBar() {
   const run = async (resume: boolean) => {
     const state = useAppStore.getState();
     const currentLogo = state.logoSource;
+    const currentLogo2 = state.logo2Source;
     const currentChapters = state.chapters;
     const currentSettings = state.settings;
     const currentFilter = state.pageFilter;
@@ -71,13 +72,14 @@ export default function ActionBar() {
     });
     addLog(
       'info',
-      `${resume ? 'Devam' : 'Başladı'} · ${currentChapters.length} bölüm · ${currentTotal} görsel · ${currentSettings.outputTarget === 'folder' ? 'klasör' : 'ZIP'}`,
+      `${resume ? 'Devam' : 'Başladı'} · ${currentChapters.length} bölüm · ${currentTotal} görsel · ${currentSettings.outputTarget === 'folder' ? 'klasör' : 'ZIP'}${currentLogo2 && currentSettings.logo2?.enabled ? ' · 2 logo' : ''}`,
     );
 
     try {
       const result = await runProcessPipeline({
         chapters: currentChapters,
         logo: currentLogo,
+        logo2: currentLogo2,
         settings: currentSettings,
         pageFilter: currentFilter,
         sourceLabel: state.sourceLabel || 'watermarked',

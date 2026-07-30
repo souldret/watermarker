@@ -4,7 +4,9 @@ import type {
   AppPreset,
   AppTheme,
   ChapterJob,
+  CustomXY,
   GifPolicy,
+  Logo2Settings,
   LogEntry,
   NamingPattern,
   OutputFormat,
@@ -34,9 +36,14 @@ import { applyThemeToDom, loadUiPrefs, saveUiPrefs } from '@/lib/uiPrefs';
 
 interface AppState {
   mode: ProcessMode;
+  // Logo 1
   logoFile: File | null;
   logoUrl: string | null;
   logoSource: LogoSource | null;
+  // Logo 2
+  logo2File: File | null;
+  logo2Url: string | null;
+  logo2Source: LogoSource | null;
   settings: WatermarkSettings;
   pageFilter: PageFilter;
   chapters: ChapterJob[];
@@ -54,8 +61,11 @@ interface AppState {
 
   setMode: (mode: ProcessMode) => void;
   setLogo: (file: File | null, source: LogoSource | null) => void;
+  setLogo2: (file: File | null, source: LogoSource | null) => void;
   patchSettings: (partial: Partial<WatermarkSettings>) => void;
   patchTextWatermark: (partial: Partial<TextWatermark>) => void;
+  patchLogo2Settings: (partial: Partial<Logo2Settings>) => void;
+  setLogo1CustomXY: (xy: CustomXY | null) => void;
   togglePosition: (position: WatermarkPosition) => void;
   setPositions: (positions: WatermarkPosition[]) => void;
   setSizeMode: (mode: SizeMode) => void;
@@ -118,6 +128,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   logoFile: null,
   logoUrl: null,
   logoSource: null,
+  logo2File: null,
+  logo2Url: null,
+  logo2Source: null,
   settings: mergeSettings(),
   pageFilter: { ...DEFAULT_PAGE_FILTER },
   chapters: [],
@@ -154,6 +167,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       logoUrl: file ? URL.createObjectURL(file) : null,
     });
   },
+
+  setLogo2: (file, source) => {
+    const prev = get().logo2Url;
+    if (prev) URL.revokeObjectURL(prev);
+    set({
+      logo2File: file,
+      logo2Source: source,
+      logo2Url: file ? URL.createObjectURL(file) : null,
+    });
+  },
+
+  patchLogo2Settings: (partial) =>
+    set((s) => ({
+      settings: {
+        ...s.settings,
+        logo2: { ...s.settings.logo2, ...partial },
+      },
+    })),
+
+  setLogo1CustomXY: (xy) =>
+    set((s) => ({
+      settings: { ...s.settings, logo1CustomXY: xy },
+    })),
 
   patchSettings: (partial) =>
     set((s) => ({
@@ -323,14 +359,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   resetAll: () => {
-    const { logoUrl, previewImageUrl, ui } = get();
+    const { logoUrl, logo2Url, previewImageUrl, ui } = get();
     if (logoUrl) URL.revokeObjectURL(logoUrl);
+    if (logo2Url) URL.revokeObjectURL(logo2Url);
     if (previewImageUrl) URL.revokeObjectURL(previewImageUrl);
     set({
       mode: 'single',
       logoFile: null,
       logoUrl: null,
       logoSource: null,
+      logo2File: null,
+      logo2Url: null,
+      logo2Source: null,
       settings: mergeSettings(),
       pageFilter: { ...DEFAULT_PAGE_FILTER },
       chapters: [],

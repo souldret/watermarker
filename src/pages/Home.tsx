@@ -1,10 +1,12 @@
 import Header from '@/components/Header';
 import LogoPanel from '@/components/LogoPanel';
+import Logo2Panel from '@/components/Logo2Panel';
 import PositionGrid from '@/components/PositionGrid';
 import SettingsSliders from '@/components/SettingsSliders';
 import ModeTabs from '@/components/ModeTabs';
 import FolderPicker from '@/components/FolderPicker';
 import PreviewCanvas from '@/components/PreviewCanvas';
+import InteractivePreview from '@/components/InteractivePreview';
 import FileTree from '@/components/FileTree';
 import ProgressPanel from '@/components/ProgressPanel';
 import ActionBar from '@/components/ActionBar';
@@ -44,6 +46,7 @@ export default function Home() {
           )}
         >
           <LogoPanel />
+          <Logo2Panel />
           <PositionGrid />
           <SettingsSliders />
           <AdvancedOptions />
@@ -59,9 +62,10 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* Sağ: kompakt önizleme + listeler */}
+        {/* Sağ: büyük interaktif önizleme + kompakt + listeler */}
         <div className={cn('flex min-h-0 flex-col gap-3', compact && 'gap-2')}>
-          <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
+          <InteractivePreview />
+          <div className="grid gap-3 md:grid-cols-[200px_minmax(0,1fr)]">
             <PreviewCanvas />
             <FileTree />
           </div>
