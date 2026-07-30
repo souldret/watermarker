@@ -105,23 +105,26 @@ export default function InteractivePreview() {
     return () => { cancelAnimationFrame(frame); ro.disconnect(); };
   }, [paint]);
 
-  // Canvas'a tıklama koordinatı → 0-1 oranı
-  const canvasXY = (e: React.MouseEvent<HTMLCanvasElement>): CustomXY => {
-    const canvas = canvasRef.current!;
+  // Canvas'a tıklama/fare koordinatı → 0-1 oranı (CSS px → canvas px → oran)
+  const relativeXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>): CustomXY | null => {
+    const canvas = canvasRef.current;
+    if (!canvas || canvas.width < 1 || canvas.height < 1) return null;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return null;
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const px = (e.clientX - rect.left) * scaleX;
-    const py = (e.clientY - rect.top) * scaleY;
+    const px = Math.max(0, (e.clientX - rect.left) * scaleX);
+    const py = Math.max(0, (e.clientY - rect.top) * scaleY);
     return {
       x: Math.min(1, Math.max(0, px / canvas.width)),
       y: Math.min(1, Math.max(0, py / canvas.height)),
     };
-  };
+  }, []);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
-    const xy = canvasXY(e);
+    const xy = relativeXY(e);
+    if (!xy) return;
     if (pinTarget === 'logo1') setLogo1CustomXY(xy);
     else patchLogo2Settings({ customXY: xy });
     setPinTarget(null);
@@ -130,14 +133,9 @@ export default function InteractivePreview() {
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    setHoverXY({
-      x: Math.min(1, Math.max(0, ((e.clientX - rect.left) * scaleX) / canvas.width)),
-      y: Math.min(1, Math.max(0, ((e.clientY - rect.top) * scaleY) / canvas.height)),
-    });
+    const xy = relativeXY(e);
+    if (!xy) return;
+    setHoverXY(xy);
   };
 
   const hasLogo1 = Boolean(logoSource);

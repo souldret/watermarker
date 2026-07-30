@@ -310,6 +310,9 @@ export function drawPreview(
   ctx.drawImage(base, 0, 0, w, h);
 
   const tw = settings.textWatermark;
+  // Önizlemede serbest XY'leri ölçekle (görsel boyutu scale ile küçülüyor)
+  // CustomXY 0-1 oranı olduğu için scale'e gerek yok —
+  // calcLogoRect zaten imageW/imageH (burada w/h) ile çarpar.
   const previewSettings: WatermarkSettings = {
     ...settings,
     marginPx: settings.marginPx * scale,
@@ -318,7 +321,11 @@ export function drawPreview(
       ? { ...tw, fontSize: (tw.fontSize || 28) * scale }
       : settings.textWatermark,
     logo2: settings.logo2
-      ? { ...settings.logo2, sizePx: settings.logo2.sizePx * scale }
+      ? {
+          ...settings.logo2,
+          sizePx: settings.logo2.sizePx * scale,
+          // sizePercent görsel genişliğine göre hesaplandığından scale gerekmez
+        }
       : settings.logo2,
   };
 
