@@ -45,6 +45,18 @@ function yieldToUI(): Promise<void> {
   });
 }
 
+/**
+ * Görsel boyutuna göre yield sıklığını hesaplar.
+ * Küçük görseller: her 5 işlemde bir yield (hızlı batch)
+ * Büyük görseller (>4MP): her işlemde yield (ana thread tepkiselliği koru)
+ */
+function yieldIntervalFor(fileSizeBytes: number): number {
+  if (fileSizeBytes > 8 * 1024 * 1024) return 1;   // >8MB: her görselde
+  if (fileSizeBytes > 2 * 1024 * 1024) return 2;   // >2MB: her 2'de bir
+  if (fileSizeBytes > 512 * 1024) return 3;         // >512KB: her 3'te bir
+  return 5;                                          // küçük: her 5'te bir
+}
+
 function isGif(name: string): boolean {
   return /\.gif$/i.test(name);
 }
@@ -220,7 +232,9 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
     }
 
     if ((i + 1) % 10 === 0) saveCp(i + 1);
-    if (i % 2 === 0) await yieldToUI();
+    // Yield sıklığı görsel boyutuna göre dinamik (büyük dosyalarda daha sık)
+    const yieldEvery = yieldIntervalFor(job.image.file.size);
+    if (i % yieldEvery === 0) await yieldToUI();
   }
 
   if (!cancelled && useZip && zip && result.success > 0) {

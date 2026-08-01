@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Crosshair, Maximize2, X, MousePointer2 } from 'lucide-react';
+import { Crosshair, Maximize2, X, MousePointer2, Info } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { drawPreview } from '@/lib/watermark';
+import { buildEdgeAnchorXY, drawPreview } from '@/lib/watermark';
 import { useI18n } from '@/hooks/useI18n';
 import { cn } from '@/lib/utils';
 import type { CustomXY } from '@/lib/types';
@@ -19,6 +19,9 @@ export default function InteractivePreview() {
   const previewImageUrl = useAppStore((s) => s.previewImageUrl);
   const setLogo1CustomXY = useAppStore((s) => s.setLogo1CustomXY);
   const patchLogo2Settings = useAppStore((s) => s.patchLogo2Settings);
+  const patchSettings = useAppStore((s) => s.patchSettings);
+
+  const customXYMode = settings.customXYMode ?? 'edge-anchor';
 
   const logo1XY = settings.logo1CustomXY;
   const logo2XY = settings.logo2?.customXY;
@@ -31,13 +34,18 @@ export default function InteractivePreview() {
     const container = containerRef.current;
     if (!container) return { maxW: 520, maxH: 720 };
     const rect = container.getBoundingClientRect();
+    // maxH, uzun görsellerde scale hesabında kullanılmıyor (scroll ile handle edilir)
+    // Yalnızca aşırı uzun şeritlerde alt sınır için iletilir
     return {
       maxW: Math.max(200, rect.width - 4),
       maxH: Math.max(200, rect.height - 4),
     };
   };
 
-  const paint = useCallback(() => {
+  const paintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Çekirdek çizim fonksiyonu — her zaman anında çalışır
+  const paintNow = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const img = imgRef.current;
@@ -60,18 +68,23 @@ export default function InteractivePreview() {
       // önizleme hatası kritik değil
     }
 
-    // Hover crosshair overlay
+    // Hover crosshair overlay (CSS piksel cinsinden — DPR canvas.style boyutunu esas al)
     if (pinTarget && hoverXY) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      const cx = hoverXY.x * canvas.width;
-      const cy = hoverXY.y * canvas.height;
+      // canvas.style.width/height drawPreview tarafından ayarlanır; CSS px cinsinden boyut
+      const cssW = parseFloat(canvas.style.width) || canvas.width;
+      const cssH = parseFloat(canvas.style.height) || canvas.height;
+      const dpr = window.devicePixelRatio || 1;
+      // Crosshair koordinatları mantıksal piksel (ctx zaten dpr scale'li)
+      const cx = hoverXY.x * cssW;
+      const cy = hoverXY.y * cssH;
       ctx.save();
       ctx.strokeStyle = pinTarget === 'logo1' ? 'rgba(255,77,77,0.85)' : 'rgba(80,180,255,0.85)';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1 / dpr;
       ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cssH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cssW, cy); ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = ctx.strokeStyle;
       ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
@@ -79,52 +92,71 @@ export default function InteractivePreview() {
     }
   }, [previewImageUrl, logoSource, logo2Source, settings, pinTarget, hoverXY]);
 
-  // Görsel yükle
+  // Debounce wrapper — slider gibi hızlı ayar değişimlerinde gereksiz yeniden çizimi önler
+  // Hover/pin gibi interaktif durumlarda PAINT_DEBOUNCE_MS kadar gecikme kabul edilebilir
+  const PAINT_DEBOUNCE_MS = 40;
+  const paint = useCallback(() => {
+    if (paintTimerRef.current !== null) clearTimeout(paintTimerRef.current);
+    paintTimerRef.current = setTimeout(() => {
+      paintTimerRef.current = null;
+      paintNow();
+    }, PAINT_DEBOUNCE_MS);
+  }, [paintNow]);
+
+  // Görsel yükle — URL değişince anında çiz (debounce yok)
   useEffect(() => {
     imgRef.current = null;
-    if (!previewImageUrl) { paint(); return; }
+    if (!previewImageUrl) { paintNow(); return; }
     let cancelled = false;
     const img = new Image();
-    img.onload = () => { if (!cancelled) { imgRef.current = img; paint(); } };
-    img.onerror = () => { if (!cancelled) { imgRef.current = null; paint(); } };
+    img.onload = () => { if (!cancelled) { imgRef.current = img; paintNow(); } };
+    img.onerror = () => { if (!cancelled) { imgRef.current = null; paintNow(); } };
     img.src = previewImageUrl;
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewImageUrl]);
 
-  // Ayar/logo değişince yeniden çiz
+  // Ayar/logo/hover değişince debounced yeniden çiz
   useEffect(() => { paint(); }, [paint]);
 
-  // Resize observer
+  // Resize observer — anında çiz (layout değişimi)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
     let frame = 0;
-    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(paint); });
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(paintNow); });
     ro.observe(container);
     return () => { cancelAnimationFrame(frame); ro.disconnect(); };
-  }, [paint]);
+  }, [paintNow]);
 
   // Canvas'a tıklama/fare koordinatı → 0-1 oranı (CSS px → canvas px → oran)
-  const relativeXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>): CustomXY | null => {
+  // DPR-aware: canvas.width/height fiziksel piksel, rect.width/height CSS piksel
+  const relativeXY = useCallback((e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } | null => {
     const canvas = canvasRef.current;
     if (!canvas || canvas.width < 1 || canvas.height < 1) return null;
     const rect = canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return null;
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const px = Math.max(0, (e.clientX - rect.left) * scaleX);
-    const py = Math.max(0, (e.clientY - rect.top) * scaleY);
+    // CSS piksel cinsinden koordinat (DPR bağımsız)
+    const cssX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const cssY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
     return {
-      x: Math.min(1, Math.max(0, px / canvas.width)),
-      y: Math.min(1, Math.max(0, py / canvas.height)),
+      x: Math.min(1, Math.max(0, cssX / rect.width)),
+      y: Math.min(1, Math.max(0, cssY / rect.height)),
     };
   }, []);
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
-    const xy = relativeXY(e);
-    if (!xy) return;
+    const ratio = relativeXY(e);
+    if (!ratio) return;
+    const img = imgRef.current;
+    let xy: CustomXY;
+    if (customXYMode === 'edge-anchor' && img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      // Orijinal görsel boyutuna göre edge-anchor hesapla
+      xy = buildEdgeAnchorXY(ratio.x, ratio.y, img.naturalWidth, img.naturalHeight);
+    } else {
+      xy = { x: ratio.x, y: ratio.y, mode: 'ratio' };
+    }
     if (pinTarget === 'logo1') setLogo1CustomXY(xy);
     else patchLogo2Settings({ customXY: xy });
     setPinTarget(null);
@@ -210,7 +242,7 @@ export default function InteractivePreview() {
 
       <div
         ref={containerRef}
-        className="relative w-full overflow-hidden rounded-lg border border-ink-border bg-ink-deep"
+        className="relative w-full overflow-y-auto overflow-x-hidden rounded-lg border border-ink-border bg-ink-deep"
         style={{ minHeight: '320px', maxHeight: '680px' }}
       >
         {!previewImageUrl && (
@@ -225,10 +257,10 @@ export default function InteractivePreview() {
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoverXY(null)}
           className={cn(
-            'block h-full w-full object-contain',
+            'block',
             pinTarget ? 'cursor-crosshair' : 'cursor-default',
           )}
-          style={{ display: 'block', width: '100%', height: 'auto' }}
+          style={{ display: 'block' }}
         />
 
         {/* Sabit konum imleri */}
@@ -250,21 +282,64 @@ export default function InteractivePreview() {
         )}
       </div>
 
-      {/* Aktif serbest konum bilgisi */}
-      <div className="mt-1.5 flex flex-wrap gap-2 text-[10px] text-ink-muted">
-        {logo1XY && (
-          <span className="rounded bg-seal/10 px-1.5 py-0.5 text-seal">
-            L1 ({(logo1XY.x * 100).toFixed(0)}%, {(logo1XY.y * 100).toFixed(0)}%)
-          </span>
-        )}
-        {logo2XY && (
-          <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-sky-300">
-            L2 ({(logo2XY.x * 100).toFixed(0)}%, {(logo2XY.y * 100).toFixed(0)}%)
-          </span>
-        )}
-        {!logo1XY && !logo2XY && (
-          <span>{t('using_grid_pos')}</span>
-        )}
+      {/* Mod seçici + aktif serbest konum bilgisi */}
+      <div className="mt-1.5 space-y-1.5">
+        {/* Konum modu seçici */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-ink-muted">Konum modu:</span>
+          {(['edge-anchor', 'ratio'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => patchSettings({ customXYMode: m })}
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10px] font-medium transition',
+                customXYMode === m
+                  ? m === 'edge-anchor'
+                    ? 'bg-seal/20 text-seal'
+                    : 'bg-ink-elevated text-ink-text'
+                  : 'text-ink-muted hover:text-ink-text',
+              )}
+            >
+              {m === 'edge-anchor' ? 'Kenar mesafesi' : 'Oran (0-1)'}
+            </button>
+          ))}
+        </div>
+
+        {/* Mod açıklama notu */}
+        <div className="flex items-start gap-1 text-[10px] text-ink-muted">
+          <Info className="mt-0.5 h-3 w-3 shrink-0" />
+          {customXYMode === 'edge-anchor' ? (
+            <span>
+              Bu konum tüm sayfalara <strong className="text-ink-text">kenar mesafesi</strong> olarak uygulanacak — uzun şeritlerde tutarlı.
+            </span>
+          ) : (
+            <span>
+              Bu konum tüm sayfalara <strong className="text-ink-text">oran (0-1)</strong> olarak uygulanacak — farklı en-boy oranında görsel kayma olabilir.
+            </span>
+          )}
+        </div>
+
+        {/* Koordinat özeti */}
+        <div className="flex flex-wrap gap-2 text-[10px] text-ink-muted">
+          {logo1XY && (
+            <span className="rounded bg-seal/10 px-1.5 py-0.5 text-seal">
+              {logo1XY.mode === 'edge-anchor' && logo1XY.anchorX
+                ? `L1 ${logo1XY.anchorX[0]}${logo1XY.anchorY?.[0] ?? ''} +${Math.round(logo1XY.offsetXPx ?? 0)}/${Math.round(logo1XY.offsetYPx ?? 0)}px`
+                : `L1 (${(logo1XY.x * 100).toFixed(0)}%, ${(logo1XY.y * 100).toFixed(0)}%)`}
+            </span>
+          )}
+          {logo2XY && (
+            <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-sky-300">
+              {logo2XY.mode === 'edge-anchor' && logo2XY.anchorX
+                ? `L2 ${logo2XY.anchorX[0]}${logo2XY.anchorY?.[0] ?? ''} +${Math.round(logo2XY.offsetXPx ?? 0)}/${Math.round(logo2XY.offsetYPx ?? 0)}px`
+                : `L2 (${(logo2XY.x * 100).toFixed(0)}%, ${(logo2XY.y * 100).toFixed(0)}%)`}
+            </span>
+          )}
+          {!logo1XY && !logo2XY && (
+            <span>{t('using_grid_pos')}</span>
+          )}
+        </div>
       </div>
     </section>
   );

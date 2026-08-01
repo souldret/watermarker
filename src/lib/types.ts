@@ -48,12 +48,36 @@ export interface TextWatermark {
   position: WatermarkPosition;
 }
 
+/**
+ * Konum belirleme modu:
+ * - 'ratio'       : 0–1 oranı (mevcut davranış — kısa/aynı oranlı seriler için)
+ * - 'edge-anchor' : En yakın kenara göre px offset (uzun manhwa şeritlerinde tutarlı)
+ */
+export type CustomXYMode = 'ratio' | 'edge-anchor';
+
+/** Kenar-bağıl anchor tanımı (edge-anchor modunda kullanılır) */
+export type AnchorX = 'left' | 'center' | 'right';
+export type AnchorY = 'top' | 'center' | 'bottom';
+
 /** Serbest piksel konum (interaktif önizlemeden sürükle/tıkla) */
 export interface CustomXY {
-  /** 0–1 oranı (görsel genişliğine göre) */
+  /** 0–1 oranı (görsel genişliğine göre) — ratio modunda kullanılır */
   x: number;
-  /** 0–1 oranı (görsel yüksekliğine göre) */
+  /** 0–1 oranı (görsel yüksekliğine göre) — ratio modunda kullanılır */
   y: number;
+  /**
+   * Konum modu. Varsayılan: 'ratio' (geriye dönük uyumluluk).
+   * 'edge-anchor' seçildiğinde offsetXPx/offsetYPx + anchorX/anchorY kullanılır.
+   */
+  mode?: CustomXYMode;
+  /** Yatay kenar (edge-anchor modunda) */
+  anchorX?: AnchorX;
+  /** Dikey kenar (edge-anchor modunda) */
+  anchorY?: AnchorY;
+  /** Kenardan yatay px offset (edge-anchor modunda, negatif olabilir) */
+  offsetXPx?: number;
+  /** Kenardan dikey px offset (edge-anchor modunda, negatif olabilir) */
+  offsetYPx?: number;
 }
 
 /** İkinci logo ayarları */
@@ -63,6 +87,8 @@ export interface Logo2Settings {
   positions: WatermarkPosition[];
   /** Serbest koordinat (null = ızgara konumu kullan) */
   customXY: CustomXY | null;
+  /** Logo 2 için konum modu (global customXYMode'u override eder; varsayılan: global'i devral) */
+  customXYMode?: CustomXYMode;
   sizeMode: SizeMode;
   sizePercent: number;
   sizePx: number;
@@ -74,6 +100,18 @@ export interface WatermarkSettings {
   positions: WatermarkPosition[];
   /** Logo 1 için serbest koordinat (null = ızgara kullan) */
   logo1CustomXY: CustomXY | null;
+  /**
+   * Global konum modu — logo1CustomXY ve logo2.customXY için geçerli.
+   * 'ratio': 0–1 oranı (mevcut davranış)
+   * 'edge-anchor': Kenara göre px offset (uzun görsellerde tutarlı)
+   */
+  customXYMode: CustomXYMode;
+  /**
+   * Per-image override map (mimari hazırlık — gelecek iterasyon).
+   * key: imagePath, value: CustomXY override.
+   * processPipeline bu map'te kayıt varsa onu, yoksa global logo1CustomXY'yi kullanır.
+   */
+  logo1CustomXYOverrides?: Record<string, CustomXY>;
   sizeMode: SizeMode;
   sizePercent: number;
   sizePx: number;
@@ -203,6 +241,7 @@ export const DEFAULT_LOGO2: Logo2Settings = {
 export const DEFAULT_SETTINGS: WatermarkSettings = {
   positions: ['br'],
   logo1CustomXY: null,
+  customXYMode: 'edge-anchor',
   sizeMode: 'percent',
   sizePercent: 12,
   sizePx: 180,

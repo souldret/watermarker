@@ -12,6 +12,51 @@ Planlanan özellikler için [GitHub Issues](https://github.com/souldret/watermar
 
 ---
 
+## [1.3.0] — 2026-08-01 — Önizleme Kalitesi, Edge-Anchor Konum ve Performans
+
+### Eklendi
+
+#### SORUN 2 — Edge-Anchor Konum Modu
+- **`CustomXYMode` tipi** (`'ratio' | 'edge-anchor'`): `types.ts`'e eklendi. Eski `ratio` modu geriye dönük uyumlu.
+- **`AnchorX` / `AnchorY` tipleri**: `'left' | 'center' | 'right'` ve `'top' | 'center' | 'bottom'`.
+- **`CustomXY` arayüzü genişletildi**: `mode`, `anchorX`, `anchorY`, `offsetXPx`, `offsetYPx` alanları eklendi.
+- **`WatermarkSettings.customXYMode`**: Global konum modu (varsayılan: `'edge-anchor'`).
+- **`WatermarkSettings.logo1CustomXYOverrides`**: Per-image override için mimari hazırlık alanı (`Record<string, CustomXY>`).
+- **`Logo2Settings.customXYMode`**: Logo 2 için bağımsız mod override.
+- **`resolveCustomXY()`** (`watermark.ts`): `CustomXY`'den `(cx, cy)` hesaplar — `ratio` modunda 0–1 oranı, `edge-anchor` modunda kenar+offset kullanır.
+- **`buildEdgeAnchorXY()`** (`watermark.ts`): Önizlemede tıklanan canvas koordinatından en yakın kenarı otomatik tespit ederek `edge-anchor` `CustomXY` üretir.
+- **`InteractivePreview` — mod seçici**: "Kenar mesafesi / Oran (0-1)" toggle butonu eklendi.
+- **`InteractivePreview` — bilgi notu**: Aktif modun açıklaması gösterilir ("Bu konum tüm sayfalara kenar mesafesi olarak uygulanacak" vb.).
+- **`InteractivePreview` — koordinat özeti**: Edge-anchor modunda `L1 rb +30/40px` formatında gösterim.
+
+#### SORUN 3 — Edge-Case Testleri
+- **19 yeni unit test**: `calcLogoSize`, `calcLogoRect`, `resolveCustomXY`, `buildEdgeAnchorXY`, `calcLogo2Rect` için sınır durum testleri.
+  - Logo görselden büyükse, `marginPx` negatifse, `imageW/H` çok küçükse, sıfır logo boyutunda çökme yok.
+  - Edge-anchor modu: kısa kapak (800x800) ile uzun strip (1000x5000) aynı köşe mesafesinde watermark alıyor.
+
+### Değiştirildi
+
+#### SORUN 1 — Önizleme Piksel/Kalite Düzeltmesi
+- **`drawPreview()`**: Canvas `backing-store` çözünürlüğü `window.devicePixelRatio` ile çarpılır; CSS boyutu ayrı `style.width/height` olarak ayarlanır → retina ekranda net önizleme.
+- **`drawPreview()`**: Scale hesabı yalnızca `maxW / baseW` oranına dayalı (yükseklik artık kısıtlamaz). Uzun manhwa şeritlerinde canvas birkaç piksel genişliğe düşüp CSS ile gerilme sorunu giderildi.
+- **`drawPreview()`**: `ctx.setTransform(dpr, 0, 0, dpr, 0, 0)` ile DPR ölçeklemesi; tüm çizim koordinatları mantıksal piksel cinsinden.
+- **`drawPreview()` ve `applyWatermark()`**: `ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'` açıkça ayarlandı.
+- **`InteractivePreview` container**: `overflow-hidden` → `overflow-y: auto` (scroll edilebilir); uzun görseller container'a sığdırılmak yerine kaydırılabilir yapıldı.
+- **`InteractivePreview` canvas**: CSS `width: 100%; height: auto` kaldırıldı; `drawPreview` tarafından `style.width/height` yönetilir.
+- **`calcLogoRect()` / `calcLogo2Rect()`**: `customXYMode` parametresi alır; `resolveCustomXY()` üzerinden pozisyon hesaplar.
+- **Crosshair overlay**: DPR-aware (`lineWidth = 1 / dpr`); koordinatlar CSS piksel cinsinden.
+
+#### SORUN 4 — Performans
+- **`processPipeline` `yieldToUI` sıklığı**: Sabit "her 2 görselde bir" yerine dosya boyutuna göre dinamik: >8MB→her görselde, >2MB→her 2'de, >512KB→her 3'te, küçük→her 5'te.
+- **`PreviewCanvas` debounce**: `paintNow` (anında) + `paint` (40ms debounce) pattern. Slider sürükleme sırasında gereksiz yeniden çizim önlendi.
+- **`InteractivePreview` debounce**: Aynı `paintNow` / `paint` pattern; görsel yükleme ve resize anında, ayar değişimi debounced.
+
+### Düzeltildi
+- **`InteractivePreview` `relativeXY()`**: DPR-aware koordinat hesabı (`canvas.width/height` fiziksel piksel, `rect.width/height` CSS piksel farkı); eski `scaleX/scaleY * canvas.width` yaklaşımı kaldırıldı.
+- **`presets.ts` `mergeLogo2()`**: `customXYMode` alanı merge edilir; eski preset'ler normalize edilir.
+
+---
+
 ## [1.2.0] — 2026-07-30 — Güvenlik & Koordinat Düzeltmeleri
 
 ### Düzeltildi
@@ -130,7 +175,8 @@ Planlanan özellikler için [GitHub Issues](https://github.com/souldret/watermar
 
 ---
 
-[Unreleased]: https://github.com/souldret/watermarker/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/souldret/watermarker/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/souldret/watermarker/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/souldret/watermarker/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/souldret/watermarker/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/souldret/watermarker/releases/tag/v1.0.0

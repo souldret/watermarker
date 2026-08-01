@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title data-i18n-attr="title" data-i18n-key="meta_title">Init Magick Studio — Chuyển đổi & Nén ảnh hàng loạt miễn phí</title>
+
+    <meta name="description" content="Chuyển đổi ảnh không giới hạn trực tiếp trên trình duyệt với ImageMagick WASM. Không upload, không server, 100% bảo mật. Hỗ trợ 100+ định dạng: JPEG, PNG, WebP, AVIF, GIF, TIFF, BMP." data-i18n-attr="content" data-i18n-key="meta_description">
+    <meta name="keywords" content="chuyển đổi ảnh, image converter, WASM, ImageMagick, client-side, JPEG, PNG, WebP, AVIF, GIF, TIFF, BMP, không giới hạn, bảo mật, trình duyệt">
+    <meta name="author" content="Init HTML">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0a0a0f" id="theme-color-meta">
+
+    <script>
+        (function() {
+            const key = 'initMagickTheme';
+            const stored = localStorage.getItem(key);
+            const theme = stored || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            document.documentElement.setAttribute('data-theme', theme);
+            if (theme === 'light') {
+                document.getElementById('theme-color-meta').setAttribute('content', '#f5f5f7');
+            }
+        })();
+    </script>
+
+    <link rel="canonical" href="https://inithtml.com/wasm/init-magick-studio/">
+    <link rel="alternate" hreflang="vi" href="https://inithtml.com/wasm/init-magick-studio/">
+    <link rel="alternate" hreflang="en" href="https://inithtml.com/wasm/init-magick-studio/">
+    <link rel="alternate" hreflang="x-default" href="https://inithtml.com/wasm/init-magick-studio/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Init Magick Studio">
+    <meta property="og:title" content="Init Magick Studio — Chuyển đổi & Nén ảnh hàng loạt miễn phí" data-i18n-attr="content" data-i18n-key="meta_og_title">
+    <meta property="og:description" content="Chuyển đổi ảnh không giới hạn trực tiếp trên trình duyệt. Không upload, không server, 100% bảo mật." data-i18n-attr="content" data-i18n-key="meta_og_description">
+    <meta property="og:url" content="https://inithtml.com/wasm/init-magick-studio/">
+    <meta property="og:image" content="https://inithtml.com/wasm/init-magick-studio/assets/img/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:locale" content="vi_VN" id="og-locale">
+    <meta property="og:locale:alternate" content="en_US">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@init_html">
+    <meta name="twitter:title" content="Init Magick Studio — Chuyển đổi & Nén ảnh hàng loạt miễn phí" data-i18n-attr="content" data-i18n-key="meta_tw_title">
+    <meta name="twitter:description" content="Chuyển đổi ảnh không giới hạn trực tiếp trên trình duyệt. 100+ định dạng, 100% client-side." data-i18n-attr="content" data-i18n-key="meta_tw_description">
+    <meta name="twitter:image" content="https://inithtml.com/wasm/init-magick-studio/assets/img/og-image.png">
+
+    <link rel="icon" type="image/png" href="assets/fav/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="assets/fav/favicon.svg" />
+    <link rel="shortcut icon" href="assets/fav/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/fav/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Init Magick Studio" />
+    <link rel="manifest" href="assets/fav/site.webmanifest" />
+
+    <link rel="stylesheet" href="assets/style.min.css?v=6.0.12">
+
+    <script type="application/ld+json" id="schema-json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Init Magick Studio",
+        "alternateName": ["Bulk Image Converter WASM", "Công cụ nén ảnh Init HTML"],
+        "url": "https://inithtml.com/wasm/init-magick-studio/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires a modern browser with WebAssembly (WASM) support",
+        "inLanguage": ["vi", "en"],
+        "softwareVersion": "6.0",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "featureList": [
+            "100% Client-side processing (No server upload)",
+            "Bulk convert to WebP, AVIF, JPEG, PNG",
+            "Offline Image Watermarking",
+            "AI Smart Crop (Entropy-based)",
+            "Privacy-first: EXIF and metadata stripping",
+            "Batch conversion with ZIP output"
+        ],
+        "description": "Free bulk image converter, compressor, and watermarking tool. Runs 100% in your browser using WASM. No uploads, total privacy, supports WebP, AVIF, PNG & JPEG.",
+        "image": "https://inithtml.com/wasm/init-magick-studio/assets/img/og-image.png",
+        "author": {
+            "@type": "Organization",
+            "name": "Init HTML",
+            "url": "https://inithtml.com/"
+        },
+        "publisher": {
+            "@type": "Organization",
+            "name": "Init HTML",
+            "url": "https://inithtml.com/",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://inithtml.com/wp-content/uploads/2025/05/cropped-logo-init-html-v3.webp"
+            }
+        }
+    }
+    </script>
+
+    <script type="application/ld+json" id="faq-schema">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "Init Magick Studio có cần upload ảnh lên server không?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Không. Tất cả quá trình chuyển đổi, nén và cắt ảnh diễn ra 100% trên trình duyệt của bạn bằng công nghệ ImageMagick WASM. Ảnh không bao giờ bị upload ra ngoài thiết bị, đảm bảo bảo mật tuyệt đối."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Công cụ có hỗ trợ chuyển đổi sang WebP và AVIF hàng loạt không?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Có. Init Magick Studio hỗ trợ chuyển đổi hàng nghìn ảnh sang các định dạng nén thế hệ mới như WebP và AVIF cực kỳ nhanh chóng và đóng gói thành file ZIP tiện lợi."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Tính năng Smart Crop hoạt động như thế nào?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Smart Crop sử dụng thuật toán Entropy và dò biên (Edge Detection) để tự động nhận diện vùng chứa nhiều chi tiết nhất của bức ảnh (như khuôn mặt, vật thể chính), giúp cắt ảnh đúng trọng tâm mà không bị mất chủ thể."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Có giới hạn số lượng và dung lượng ảnh tải lên không?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Hoàn toàn không có giới hạn từ hệ thống. Bạn có thể xử lý bao nhiêu ảnh tùy thích, giới hạn duy nhất phụ thuộc vào dung lượng RAM trên máy tính/điện thoại của bạn."
+                }
+            }
+        ]
+    }
+    </script>
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0EDEXGQXY4"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-0EDEXGQXY4');
+    </script>
+</head>
+<body>
+    <div class="bg-mesh"></div>
+    <div class="noise-overlay"></div>
+
+    <div class="app">
+        <!-- Theme Toggle -->
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark theme">
+            <svg class="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        </button>
+
+        <!-- Language Switcher -->
+        <div class="lang-switch" role="group" aria-label="Language selector">
+            <button class="lang-btn" data-lang="en" aria-label="English">EN</button>
+            <button class="lang-btn" data-lang="vi" aria-label="Tiếng Việt">VI</button>
+        </div>
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header__badge">
+                <span class="dot"></span>
+                <span class="icon-shield">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </span>
+                <span data-i18n="badge">100% Client-Side • Không Giới Hạn</span>
+            </div>
+            <h1 class="header__title">
+                <a href="https://inithtml.com/wasm/init-magick-studio/">
+                    <span data-i18n="title">Init Magick Studio</span>
+                </a>
+            </h1>
+            <p class="header__subtitle" data-i18n="subtitle">Chuyển đổi ảnh không giới hạn ngay trên trình duyệt với ImageMagick WASM. Không upload, không server, dữ liệu không rời khỏi thiết bị.</p>
+            <div class="header__stats">
+                <div class="stat">
+                    <div class="stat__value">100+</div>
+                    <div class="stat__label" data-i18n="stat_formats">Định dạng</div>
+                </div>
+                <div class="stat">
+                    <div class="stat__value">999+</div>
+                    <div class="stat__label" data-i18n="stat_files">Số file</div>
+                </div>
+                <div class="stat">
+                    <div class="stat__value">0ms</div>
+                    <div class="stat__label" data-i18n="stat_upload">Upload</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Upload Card -->
+        <div class="card">
+            <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Drop zone for image files">
+                <input type="file" id="fileInput" multiple accept="image/*" aria-label="Select image files">
+                <div class="drop-zone__icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div class="drop-zone__title" data-i18n="drop_title">Kéo thả ảnh vào đây hoặc click để chọn</div>
+                <div class="drop-zone__hint" data-i18n="drop_hint">Hỗ trợ <span class="format-tag">JPEG, PNG, WebP, AVIF, GIF, BMP, TIFF, RAW</span> và nhiều định dạng khác</div>
+            </div>
+
+            <div class="file-list" id="fileList" role="list" aria-label="Selected files"></div>
+        </div>
+
+        <!-- Settings Card -->
+        <div class="card" id="settingsCard" style="display:none;">
+            <div class="settings-grid">
+                <!-- Output Format -->
+                <div class="field-group">
+                    <label class="field-group__label" for="formatSelect">
+                        <span class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                        </span>
+                        <span data-i18n="label_format">Định dạng đầu ra</span>
+                    </label>
+                    <select id="formatSelect" aria-label="Output format">
+                        <option value="jpeg">JPEG — Tốt nhất cho ảnh chụp</option>
+                        <option value="png">PNG — Chất lượng không mất dữ liệu</option>
+                        <option value="webp">WebP — Hiện đại & nhỏ gọn</option>
+                        <option value="avif">AVIF — Nén thế hệ mới</option>
+                        <option value="gif">GIF — Hỗ trợ animation</option>
+                        <option value="tiff">TIFF — Chất lượng in ấn</option>
+                        <option value="bmp">BMP — Không nén</option>
+                    </select>
+                </div>
+
+                <!-- Quality -->
+                <div class="field-group">
+                    <label class="field-group__label" for="qualitySlider">
+                        <span class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        </span>
+                        <span data-i18n="label_quality">Chất lượng nén</span>
+                    </label>
+                    <div class="quality-wrap">
+                        <input type="range" id="qualitySlider" class="quality-slider" min="1" max="100" value="85" aria-label="Compression quality" aria-valuemin="1" aria-valuemax="100" aria-valuenow="85">
+                        <div class="quality-value" id="qualityValue" aria-live="polite">85</div>
+                    </div>
+                    <span class="field-group__hint" data-i18n="hint_quality">Cao = chất lượng tốt hơn, file lớn hơn. Thấp = file nhỏ hơn, mất một phần chất lượng.</span>
+                </div>
+
+                <!-- Dimensions (Width + Height) -->
+                <div class="field-group field-group--full">
+                    <label class="field-group__label" for="widthInput">
+                        <span class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                        </span>
+                        <span data-i18n="label_dimensions">Kích thước đầu ra</span>
+                    </label>
+                    <div class="dimension-inputs">
+                        <div class="dim-input-wrap">
+                            <input type="number" id="widthInput" placeholder="e.g. 1920" min="1" max="16384" aria-label="Maximum width in pixels">
+                            <span class="dim-tag">W</span>
+                        </div>
+                        <span class="dim-sep" aria-hidden="true">×</span>
+                        <div class="dim-input-wrap">
+                            <input type="number" id="heightInput" placeholder="e.g. 1080" min="1" max="16384" aria-label="Maximum height in pixels">
+                            <span class="dim-tag">H</span>
+                        </div>
+                    </div>
+                    <span class="field-group__hint" data-i18n="hint_dimensions">Để trống để giữ nguyên kích thước gốc. Nhập 1 chiều giữ tỷ lệ. Nhập 2 chiều để crop chính xác.</span>
+                </div>
+            </div>
+
+            <!-- Presets -->
+            <div class="preset-section">
+                <div class="preset-grid" id="presetGrid" role="group" aria-label="Dimension presets">
+                    <button id="presetChip1920" type="button" class="preset-chip" data-w="1920" data-h="1080">
+                        <span class="preset-chip__name">FHD</span>
+                        <span class="preset-chip__dim">1920×1080</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1080" data-h="1920">
+                        <span class="preset-chip__name">Story</span>
+                        <span class="preset-chip__dim">1080×1920</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1080" data-h="1080">
+                        <span class="preset-chip__name">Square</span>
+                        <span class="preset-chip__dim">1:1</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1200" data-h="630">
+                        <span class="preset-chip__name">Social</span>
+                        <span class="preset-chip__dim">1200×630</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="300" data-h="300">
+                        <span class="preset-chip__name">Thumb</span>
+                        <span class="preset-chip__dim">300×300</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="2480" data-h="3508">
+                        <span class="preset-chip__name">A4</span>
+                        <span class="preset-chip__dim">2480×3508</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="3840" data-h="2160">
+                        <span class="preset-chip__name">4K</span>
+                        <span class="preset-chip__dim">3840×2160</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="2560" data-h="1440">
+                        <span class="preset-chip__name">2K</span>
+                        <span class="preset-chip__dim">2560×1440</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1366" data-h="768">
+                        <span class="preset-chip__name">HD</span>
+                        <span class="preset-chip__dim">1366×768</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1500" data-h="500">
+                        <span class="preset-chip__name">Banner</span>
+                        <span class="preset-chip__dim">1500×500</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="820" data-h="312">
+                        <span class="preset-chip__name">FB Cover</span>
+                        <span class="preset-chip__dim">820×312</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1080" data-h="1350">
+                        <span class="preset-chip__name">IG Post</span>
+                        <span class="preset-chip__dim">4:5</span>
+                    </button>
+                    <button type="button" class="preset-chip" data-w="1280" data-h="720">
+                        <span class="preset-chip__name">YT Thumb</span>
+                        <span class="preset-chip__dim">1280×720</span>
+                    </button>
+                    <button type="button" class="preset-chip preset-chip--clear" data-w="" data-h="">
+                        <span class="preset-chip__name">Clear</span>
+                        <span class="preset-chip__dim">Reset</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Toggles: Smart Crop + Strip EXIF -->
+            <div class="toggle-section">
+                <div class="toggle-row toggle-row--compact" id="smartCropRow">
+                    <div class="toggle-row__label">
+                        <div class="toggle-row__title">
+                            <span class="icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M3 6h18"/><path d="M3 18h18"/><circle cx="12" cy="12" r="3"/></svg>
+                            </span>
+                            <span data-i18n="opt_smart_crop">Smart Crop</span>
+                        </div>
+                        <div class="toggle-row__desc" data-i18n="opt_smart_crop_desc">Cắt theo Entropy — giữ vùng chi tiết cao nhất, bỏ vùng trống.</div>
+                    </div>
+                    <label class="switch-control">
+                        <input type="checkbox" id="smartCropToggle" aria-label="Enable Smart Crop">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row toggle-row--compact">
+                    <div class="toggle-row__label">
+                        <div class="toggle-row__title">
+                            <span class="icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </span>
+                            <span data-i18n="opt_strip_metadata">Xóa EXIF</span>
+                        </div>
+                        <div class="toggle-row__desc" data-i18n="opt_strip_metadata_desc">Xóa GPS, thiết bị & profile màu.</div>
+                    </div>
+                    <label class="switch-control">
+                        <input type="checkbox" id="stripMetadata" checked aria-label="Strip EXIF metadata">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row toggle-row--compact">
+                    <div class="toggle-row__label">
+                        <div class="toggle-row__title">
+                            <span class="icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+                            </span>
+                            <span data-i18n="opt_flip_h">Lật ngang</span>
+                        </div>
+                        <div class="toggle-row__desc" data-i18n="opt_flip_h_desc">Lật ảnh theo chiều ngang (mirror).</div>
+                    </div>
+                    <label class="switch-control">
+                        <input type="checkbox" id="flipHToggle" aria-label="Flip horizontal">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row toggle-row--compact">
+                    <div class="toggle-row__label">
+                        <div class="toggle-row__title">
+                            <span class="icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v18M12 3v18M17 3v18"/></svg>
+                            </span>
+                            <span data-i18n="opt_flip_v">Lật dọc</span>
+                        </div>
+                        <div class="toggle-row__desc" data-i18n="opt_flip_v_desc">Lật ảnh theo chiều dọc (upside down).</div>
+                    </div>
+                    <label class="switch-control">
+                        <input type="checkbox" id="flipVToggle" aria-label="Flip vertical">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- WATERMARK SECTION v5.0 — Compact 3-Column Equal Height -->
+            <div class="watermark-section" id="watermarkSection">
+                <!-- Header -->
+                <div class="watermark-header">
+                    <div class="watermark-header__left">
+                        <span class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                        </span>
+                        <span class="watermark-header__title" data-i18n="watermark_title">Watermark</span>
+                    </div>
+                    <label class="switch-control">
+                        <input type="checkbox" id="watermarkToggle" aria-label="Enable watermark">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+
+                <!-- Body — 3 Equal Columns -->
+                <div class="watermark-body" id="watermarkBody">
+                    <div class="watermark-cols">
+                        <!-- Col 1: Dropzone -->
+                        <div class="watermark-col">
+                            <div class="watermark-dropzone" id="watermarkDropzone" role="button" tabindex="0" aria-label="Drop zone for watermark image">
+                                <input type="file" id="watermarkInput" accept="image/*" aria-label="Select watermark image">
+                                <div class="watermark-dropzone__preview" id="watermarkPreview">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                </div>
+                                <button class="watermark-dropzone__remove" id="watermarkRemove" title="Xóa" aria-label="Remove watermark image" style="display:none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Position Grid -->
+                        <div class="watermark-col">
+                            <div class="watermark-grid" id="watermarkGrid" role="group" aria-label="Watermark position grid">
+                                <button type="button" class="watermark-grid__cell" data-pos="tl" aria-label="Top Left" title="Top Left"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="tc" aria-label="Top Center" title="Top Center"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="tr" aria-label="Top Right" title="Top Right"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="ml" aria-label="Middle Left" title="Middle Left"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="mc" aria-label="Center" title="Center"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="mr" aria-label="Middle Right" title="Middle Right"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="bl" aria-label="Bottom Left" title="Bottom Left"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell" data-pos="bc" aria-label="Bottom Center" title="Bottom Center"><span class="watermark-grid__dot"></span></button>
+                                <button type="button" class="watermark-grid__cell active" data-pos="br" aria-label="Bottom Right" title="Bottom Right"><span class="watermark-grid__dot"></span></button>
+                            </div>
+                        </div>
+
+                        <!-- Col 3: Sliders -->
+                        <div class="watermark-col">
+                            <div class="watermark-sliders">
+                                <div class="watermark-slider">
+                                    <div class="watermark-slider__top">
+                                        <label data-i18n="watermark_size" for="watermarkSizeSlider">Size</label>
+                                        <span class="watermark-slider__val" id="watermarkSizeValue">10%</span>
+                                    </div>
+                                    <input type="range" id="watermarkSizeSlider" min="1" max="100" value="10" aria-label="Watermark size">
+                                </div>
+                                <div class="watermark-slider">
+                                    <div class="watermark-slider__top">
+                                        <label data-i18n="watermark_opacity" for="watermarkOpacitySlider">Opacity</label>
+                                        <span class="watermark-slider__val" id="watermarkOpacityValue">50%</span>
+                                    </div>
+                                    <input type="range" id="watermarkOpacitySlider" min="1" max="100" value="50" aria-label="Watermark opacity">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="actions">
+                <button class="btn btn--primary" id="processBtn" aria-label="Convert and download ZIP">
+                    <span class="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+                    </span>
+                    <span data-i18n="btn_convert">Chuyển đổi & Tải ZIP</span>
+                </button>
+                <button class="btn btn--ghost" id="clearBtn" aria-label="Clear all files">
+                    <span class="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    </span>
+                    <span data-i18n="btn_clear">Xóa tất cả</span>
+                </button>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-section" id="progressSection" role="region" aria-label="Processing progress">
+                <div class="progress-header">
+                    <div class="progress-title">
+                        <span class="spinner" id="progressSpinner" role="status" aria-label="Đang xử lý"></span>
+                        <span data-i18n="progress_title">Đang xử lý</span>
+                    </div>
+                    <div class="progress-percent" id="progressPercent" aria-live="polite">0%</div>
+                </div>
+                
+                <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Tiến trình chuyển đổi">
+                    <div class="progress-bar-fill" id="progressBarFill"></div>
+                </div>
+                
+                <div class="progress-status" id="progressStatus" data-i18n="progress_init" aria-live="polite">Đang khởi tạo engine WASM...</div>
+                
+                <div class="log-output" id="logOutput" role="log" aria-label="Processing log"></div>
+
+                <div id="resultActions" class="result-actions" style="display: none;">
+                    <hr class="result-divider" />
+                    <div class="result-summary" id="resultSummary" aria-live="polite"></div>
+                    <a href="#" id="downloadZipBtn" class="btn btn--primary" style="width: 100%; margin-top: 8px;">
+                        <span class="icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </span>
+                        <span data-i18n="btn_download_zip">Tải xuống ZIP</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p class="footer__text">
+                <span class="icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </span>
+                <a href="https://inithtml.com/" target="_blank" rel="noopener" aria-label="Init HTML homepage">Init HTML</a> — <span data-i18n="footer">Được hỗ trợ bởi ImageMagick WASM</span>
+            </p>
+            <div class="footer__links">
+                <a href="https://github.com/dlemstra/magick-wasm" target="_blank" rel="noopener" aria-label="Magick.WASM GitHub">
+                    <span class="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                    </span>
+                    Magick.WASM
+                </a>
+                <a href="https://imagemagick.org/" target="_blank" rel="noopener" aria-label="ImageMagick official website">
+                    <span class="icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </span>
+                    ImageMagick
+                </a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer" role="region" aria-label="Notifications"></div>
+
+    <script src="assets/smartcrop.min.js"></script>
+    <script src="assets/jszip.min.js"></script>
+    <script src="assets/app.min.js?v=6.0.12"></script>
+</body>
+</html>

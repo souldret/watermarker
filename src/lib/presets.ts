@@ -25,6 +25,7 @@ function mergeLogo2(partial?: Partial<Logo2Settings> | null): Logo2Settings {
         ? [...partial.positions]
         : [...DEFAULT_LOGO2.positions],
     customXY: partial?.customXY ?? null,
+    customXYMode: partial?.customXYMode ?? undefined,
   };
 }
 

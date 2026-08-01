@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { drawPreview } from '@/lib/watermark';
 import { ImageIcon } from 'lucide-react';
@@ -7,19 +7,22 @@ import { useI18n } from '@/hooks/useI18n';
 /** Kompakt önizleme — sabit max boyut, ekranı boğmaz */
 const PREVIEW_MAX_W = 220;
 const PREVIEW_MAX_H = 280;
+/** Slider sürükleme sırasında debounce süresi (ms) */
+const PAINT_DEBOUNCE_MS = 40;
 
 export default function PreviewCanvas() {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const paintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logoSource = useAppStore((s) => s.logoSource);
   const logo2Source = useAppStore((s) => s.logo2Source);
   const settings = useAppStore((s) => s.settings);
   const previewImageUrl = useAppStore((s) => s.previewImageUrl);
   const previewPath = useAppStore((s) => s.previewPath);
 
-  const paint = () => {
+  const paintNow = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas) return;
@@ -56,12 +59,22 @@ export default function PreviewCanvas() {
     } catch {
       // Önizleme hatası UI'yi düşürmesin
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logoSource, logo2Source, settings, previewImageUrl]);
+
+  // Debounce wrapper — slider sürükleme gibi hızlı değişimlerde gereksiz yeniden çizimi önler
+  const paint = useCallback(() => {
+    if (paintTimerRef.current !== null) clearTimeout(paintTimerRef.current);
+    paintTimerRef.current = setTimeout(() => {
+      paintTimerRef.current = null;
+      paintNow();
+    }, PAINT_DEBOUNCE_MS);
+  }, [paintNow]);
 
   useEffect(() => {
     imgRef.current = null;
     if (!previewImageUrl) {
-      paint();
+      paintNow();
       return;
     }
 
@@ -70,12 +83,12 @@ export default function PreviewCanvas() {
     img.onload = () => {
       if (cancelled) return;
       imgRef.current = img;
-      paint();
+      paintNow();
     };
     img.onerror = () => {
       if (cancelled) return;
       imgRef.current = null;
-      paint();
+      paintNow();
     };
     img.src = previewImageUrl;
 
@@ -87,8 +100,7 @@ export default function PreviewCanvas() {
 
   useEffect(() => {
     paint();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logoSource, settings]);
+  }, [paint]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -96,7 +108,7 @@ export default function PreviewCanvas() {
     let frame = 0;
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => paint());
+      frame = requestAnimationFrame(() => paintNow());
     });
     ro.observe(container);
     return () => {
