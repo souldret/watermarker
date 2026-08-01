@@ -11,6 +11,9 @@ import type {
 } from './types';
 import { pickSmartPosition } from './smartPosition';
 
+/** Tek bir watermark rect'i */
+export type Rect = { x: number; y: number; w: number; h: number };
+
 export interface LogoSource {
   width: number;
   height: number;
@@ -173,6 +176,51 @@ export function calcLogoRect(
   return { x, y, w, h };
 }
 
+/**
+ * Uzun şerit modu için çoklu rect listesi döner.
+ * - longStripMode.enabled ve imageH/imageW >= aspectThreshold ise
+ *   tek rect'i Y ekseninde repeatEveryPx aralıklarıyla tekrarlar.
+ * - customXY (serbest konum) varsa tekrar UYGULANMAZ — tek rect döner.
+ * - Aksi halde tek elemanlı array döner (mevcut davranış).
+ */
+export function calcLogoRects(
+  imageW: number,
+  imageH: number,
+  logoW: number,
+  logoH: number,
+  position: WatermarkPosition,
+  settings: Pick<WatermarkSettings, 'sizeMode' | 'sizePercent' | 'sizePx' | 'marginPx' | 'longStripMode'> & { customXYMode?: CustomXYMode },
+  customXY?: CustomXY | null,
+): Rect[] {
+  const baseRect = calcLogoRect(imageW, imageH, logoW, logoH, position, settings, customXY);
+
+  // Serbest konum seçiliyken tekrar yapma
+  if (customXY) return [baseRect];
+
+  const lsm = settings.longStripMode;
+  if (!lsm || !lsm.enabled) return [baseRect];
+
+  const aspectRatio = imageH / Math.max(1, imageW);
+  if (aspectRatio < lsm.aspectThreshold) return [baseRect];
+
+  // Uzun şerit: Y ekseninde tekrarla
+  const rects: Rect[] = [];
+  const repeatEvery = Math.max(50, lsm.repeatEveryPx);
+  // İlk tekrarı baseRect.y'den başlat, sonra repeatEvery aralıklarla ekle
+  // Başlangıç konumunu Y=0'dan başlatıp grid'e hizala
+  const startY = baseRect.y % repeatEvery;
+  let y = startY;
+  while (y < imageH) {
+    // Logo görsel dışına taşmasın
+    const clampedY = Math.min(Math.max(0, y), Math.max(0, imageH - baseRect.h));
+    rects.push({ ...baseRect, y: clampedY });
+    y += repeatEvery;
+    // Sonsuz döngü koruması
+    if (rects.length > 500) break;
+  }
+  return rects.length > 0 ? rects : [baseRect];
+}
+
 /** Logo 2 için rect — kendi boyut/konum ayarlarından */
 export function calcLogo2Rect(
   imageW: number,
@@ -318,13 +366,15 @@ export async function applyWatermark(
     const positions = resolvePositions(ctx, canvas.width, canvas.height, settings);
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
-      const rect = calcLogoRect(
+      const rects = calcLogoRects(
         canvas.width, canvas.height,
         logo.width, logo.height,
         pos, settings,
         settings.logo1CustomXY,
       );
-      drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
+      for (const rect of rects) {
+        drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
+      }
     }
   }
 
@@ -441,11 +491,13 @@ export function drawPreview(
     const positions = resolvePositions(ctx, cssW, cssH, previewSettings);
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
-      const rect = calcLogoRect(
+      const rects = calcLogoRects(
         cssW, cssH, logo.width, logo.height, pos, previewSettings,
         previewSettings.logo1CustomXY,
       );
-      drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
+      for (const rect of rects) {
+        drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
+      }
     }
   }
 

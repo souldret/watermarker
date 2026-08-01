@@ -82,6 +82,7 @@ interface AppState {
   setGifPolicy: (p: GifPolicy) => void;
   setSmartPosition: (v: boolean) => void;
   setLargeFileMb: (v: number) => void;
+  patchLongStripMode: (partial: Partial<WatermarkSettings['longStripMode']>) => void;
   patchPageFilter: (partial: Partial<PageFilter>) => void;
   setChapters: (chapters: ChapterJob[], sourceLabel: string) => void;
   setPreviewByPath: (path: string | null) => void;
@@ -247,6 +248,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSmartPosition: (smartPosition) =>
     set((s) => ({ settings: { ...s.settings, smartPosition } })),
   setLargeFileMb: (largeFileMb) => set((s) => ({ settings: { ...s.settings, largeFileMb } })),
+
+  patchLongStripMode: (partial) =>
+    set((s) => ({
+      settings: {
+        ...s.settings,
+        longStripMode: { ...s.settings.longStripMode, ...partial },
+      },
+    })),
 
   patchPageFilter: (partial) => set((s) => ({ pageFilter: { ...s.pageFilter, ...partial } })),
 

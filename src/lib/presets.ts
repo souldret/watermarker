@@ -6,6 +6,9 @@ import {
   DEFAULT_TEXT_WATERMARK,
 } from './types';
 
+/** Güncel şema sürümü — yeni alan eklenince artır */
+export const CURRENT_SCHEMA_VERSION = 2;
+
 const STORAGE_KEY = 'watermarker.presets.v1';
 
 function uid(): string {
@@ -43,6 +46,10 @@ export function mergeSettings(partial?: Partial<WatermarkSettings> | null): Wate
       ...partial?.textWatermark,
     },
     logo2: mergeLogo2(partial?.logo2),
+    longStripMode: {
+      ...DEFAULT_SETTINGS.longStripMode,
+      ...(partial?.longStripMode ?? {}),
+    },
   };
 }
 
@@ -50,14 +57,50 @@ export function mergeFilter(partial?: Partial<PageFilter> | null): PageFilter {
   return { ...DEFAULT_PAGE_FILTER, ...partial };
 }
 
-function normalizePreset(raw: AppPreset): AppPreset {
+/**
+ * Ham/eski format preset'i güncel şemaya migrate eder.
+ * - schemaVersion yoksa (eski kayıtlar) 1 kabul edilir.
+ * - Eksik alanlar DEFAULT_SETTINGS ile doldurulur (bozuk/kısmi JSON'a dayanıklı).
+ * - Her yeni şema versiyonu için ilgili dönüşüm adımı buraya eklenir.
+ */
+export function migratePreset(raw: Record<string, unknown>): AppPreset {
+  let version: number = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1;
+
+  const rawSettings = raw.settings;
+  let settings: Record<string, unknown> =
+    typeof rawSettings === 'object' && rawSettings !== null
+      ? { ...(rawSettings as Record<string, unknown>) }
+      : {};
+
+  // — v1 → v2: longStripMode alanı eklendi —
+  if (version < 2) {
+    if (!settings.longStripMode || typeof settings.longStripMode !== 'object') {
+      settings.longStripMode = { ...DEFAULT_SETTINGS.longStripMode };
+    }
+    version = 2;
+  }
+
+  // Gelecek versiyonlar için yer tutucu:
+  // if (version < 3) { /* v2 → v3 dönüşümü */ version = 3; }
+
+  const rawPageFilter = raw.pageFilter;
+
   return {
-    id: raw.id || uid(),
-    name: raw.name || 'İsimsiz preset',
-    settings: mergeSettings(raw.settings),
-    pageFilter: mergeFilter(raw.pageFilter),
-    createdAt: raw.createdAt || Date.now(),
+    id: typeof raw.id === 'string' ? raw.id : uid(),
+    name: typeof raw.name === 'string' ? raw.name : 'İsimsiz preset',
+    settings: mergeSettings(settings as Partial<WatermarkSettings>),
+    pageFilter: mergeFilter(
+      typeof rawPageFilter === 'object' && rawPageFilter !== null
+        ? (rawPageFilter as Partial<PageFilter>)
+        : undefined,
+    ),
+    createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+    schemaVersion: CURRENT_SCHEMA_VERSION,
   };
+}
+
+function normalizePreset(raw: AppPreset): AppPreset {
+  return migratePreset(raw as unknown as Record<string, unknown>);
 }
 
 export function loadPresets(): AppPreset[] {
@@ -87,6 +130,7 @@ export function createPreset(
     settings: cloneJson(mergeSettings(settings)),
     pageFilter: cloneJson(mergeFilter(pageFilter)),
     createdAt: Date.now(),
+    schemaVersion: CURRENT_SCHEMA_VERSION,
   };
 }
 

@@ -131,6 +131,17 @@ export interface WatermarkSettings {
   largeFileMb: number;
   /** İkinci logo ayarları */
   logo2: Logo2Settings;
+  /**
+   * Uzun manhwa şeridi modu — yüksek/geniş oranlı görsellerde watermark'ı dikeyde tekrarlar.
+   * Eklendi: schemaVersion 2
+   */
+  longStripMode: {
+    enabled: boolean;
+    /** height/width oranı bu değeri geçince otomatik devreye girer */
+    aspectThreshold: number;
+    /** Kaç piksel'de bir tekrarlansın (Y ekseni) */
+    repeatEveryPx: number;
+  };
 }
 
 export interface AppPreset {
@@ -139,6 +150,8 @@ export interface AppPreset {
   settings: WatermarkSettings;
   pageFilter: PageFilter;
   createdAt: number;
+  /** Şema sürümü — yoksa 1 kabul edilir (eski kayıtlar) */
+  schemaVersion?: number;
 }
 
 /** Ekip şablon paketi (logo base64 opsiyonel + preset listesi) */
@@ -150,6 +163,8 @@ export interface TemplatePack {
   /** data URL veya boş */
   logoDataUrl?: string;
   logoFileName?: string;
+  /** Şablon paketi şema sürümü */
+  schemaVersion?: number;
 }
 
 export interface ProcessResult {
@@ -258,6 +273,11 @@ export const DEFAULT_SETTINGS: WatermarkSettings = {
   textWatermark: { ...DEFAULT_TEXT_WATERMARK },
   largeFileMb: 25,
   logo2: { ...DEFAULT_LOGO2 },
+  longStripMode: {
+    enabled: true,
+    aspectThreshold: 3,
+    repeatEveryPx: 1500,
+  },
 };
 
 export const DEFAULT_UI_PREFS: UiPrefs = {

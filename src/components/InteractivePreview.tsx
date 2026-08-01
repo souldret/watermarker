@@ -33,6 +33,14 @@ export default function InteractivePreview() {
   const [pinTarget, setPinTarget] = useState<'logo1' | 'logo2' | null>(null);
   const [hoverXY, setHoverXY] = useState<{ x: number; y: number } | null>(null);
 
+  // Sürükleme state'i
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  // mouseUp sonrası click event'ini yutmak için flag (double-apply önleme)
+  const dragEndedRef = useRef(false);
+  // Sürükleme sırasında ghost önizlemesi (0-1 oranı)
+  const [ghostXY, setGhostXY] = useState<{ x: number; y: number } | null>(null);
+
   const getMaxDims = () => {
     const container = containerRef.current;
     if (!container) return { maxW: 520, maxH: 720 };
@@ -71,29 +79,46 @@ export default function InteractivePreview() {
       // önizleme hatası kritik değil
     }
 
-    // Hover crosshair overlay (CSS piksel cinsinden — DPR canvas.style boyutunu esas al)
-    if (pinTarget && hoverXY) {
+    // Hover crosshair + sürükleme ghost overlay
+    const overlayXY = ghostXY || hoverXY;
+    if (pinTarget && overlayXY) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      // canvas.style.width/height drawPreview tarafından ayarlanır; CSS px cinsinden boyut
       const cssW = parseFloat(canvas.style.width) || canvas.width;
       const cssH = parseFloat(canvas.style.height) || canvas.height;
       const dpr = window.devicePixelRatio || 1;
-      // Crosshair koordinatları mantıksal piksel (ctx zaten dpr scale'li)
-      const cx = hoverXY.x * cssW;
-      const cy = hoverXY.y * cssH;
+      const cx = overlayXY.x * cssW;
+      const cy = overlayXY.y * cssH;
+      const color = pinTarget === 'logo1' ? 'rgba(255,77,77,0.85)' : 'rgba(80,180,255,0.85)';
+      const colorFill = pinTarget === 'logo1' ? 'rgba(255,77,77,0.25)' : 'rgba(80,180,255,0.25)';
       ctx.save();
-      ctx.strokeStyle = pinTarget === 'logo1' ? 'rgba(255,77,77,0.85)' : 'rgba(80,180,255,0.85)';
+      ctx.strokeStyle = color;
       ctx.lineWidth = 1 / dpr;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cssH); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cssW, cy); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = ctx.strokeStyle;
-      ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+
+      if (isDraggingRef.current && ghostXY) {
+        // Sürükleme: crosshair yerine ghost logo kutusu göster
+        const logo = pinTarget === 'logo1' ? logoSource : logo2Source;
+        const ghostW = logo ? Math.round(cssW * 0.15) : 40;
+        const ghostH = logo ? Math.round(ghostW * (logo.height / Math.max(1, logo.width))) : 24;
+        ctx.setLineDash([3, 2]);
+        ctx.strokeRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
+        ctx.fillStyle = colorFill;
+        ctx.fillRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // Normal crosshair
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cssH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cssW, cy); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
     }
-  }, [previewImageUrl, logoSource, logo2Source, settings, pinTarget, hoverXY]);
+  }, [previewImageUrl, logoSource, logo2Source, settings, pinTarget, hoverXY, ghostXY]);
 
   // Debounce wrapper — slider gibi hızlı ayar değişimlerinde gereksiz yeniden çizimi önler
   const paint = useCallback(() => {
@@ -146,29 +171,80 @@ export default function InteractivePreview() {
     };
   }, []);
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  /** Koordinat → CustomXY dönüştürücü */
+  const buildCustomXY = useCallback((ratio: { x: number; y: number }): CustomXY => {
+    const img = imgRef.current;
+    if (customXYMode === 'edge-anchor' && img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      return buildEdgeAnchorXY(ratio.x, ratio.y, img.naturalWidth, img.naturalHeight);
+    }
+    return { x: ratio.x, y: ratio.y, mode: 'ratio' };
+  }, [customXYMode]);
+
+  /** Konumu uygula */
+  const applyXY = useCallback((ratio: { x: number; y: number }, target: 'logo1' | 'logo2') => {
+    const xy = buildCustomXY(ratio);
+    if (target === 'logo1') setLogo1CustomXY(xy);
+    else patchLogo2Settings({ customXY: xy });
+  }, [buildCustomXY, setLogo1CustomXY, patchLogo2Settings]);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
     const ratio = relativeXY(e);
     if (!ratio) return;
-    const img = imgRef.current;
-    let xy: CustomXY;
-    if (customXYMode === 'edge-anchor' && img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-      // Orijinal görsel boyutuna göre edge-anchor hesapla
-      xy = buildEdgeAnchorXY(ratio.x, ratio.y, img.naturalWidth, img.naturalHeight);
-    } else {
-      xy = { x: ratio.x, y: ratio.y, mode: 'ratio' };
+    isDraggingRef.current = true;
+    dragStartRef.current = ratio;
+    setGhostXY(ratio);
+    e.preventDefault(); // Metin seçimini engelle
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Sürükleme bittiyse click event'ini yut (mouseUp zaten applyXY yaptı)
+    if (dragEndedRef.current) {
+      dragEndedRef.current = false;
+      return;
     }
-    if (pinTarget === 'logo1') setLogo1CustomXY(xy);
-    else patchLogo2Settings({ customXY: xy });
+    if (!pinTarget) return;
+    if (isDraggingRef.current) return;
+    const ratio = relativeXY(e);
+    if (!ratio) return;
+    applyXY(ratio, pinTarget);
     setPinTarget(null);
     setHoverXY(null);
+    setGhostXY(null);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
     const xy = relativeXY(e);
     if (!xy) return;
-    setHoverXY(xy);
+    if (isDraggingRef.current) {
+      setGhostXY(xy);
+    } else {
+      setHoverXY(xy);
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!pinTarget || !isDraggingRef.current) return;
+    const ratio = relativeXY(e);
+    isDraggingRef.current = false;
+    dragStartRef.current = null;
+    dragEndedRef.current = true; // click event'ini yutmak için
+    setGhostXY(null);
+    if (ratio) {
+      applyXY(ratio, pinTarget);
+      setPinTarget(null);
+      setHoverXY(null);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHoverXY(null);
+    // Sürükleme varsa ghost'u sıfırla ama pin'i koru
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false;
+      setGhostXY(null);
+    }
   };
 
   const hasLogo1 = Boolean(logoSource);
@@ -254,12 +330,18 @@ export default function InteractivePreview() {
         )}
         <canvas
           ref={canvasRef}
-          onClick={handleClick}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHoverXY(null)}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          onClick={handleClick}
           className={cn(
             'block',
-            pinTarget ? 'cursor-crosshair' : 'cursor-default',
+            pinTarget
+              ? isDraggingRef.current
+                ? 'cursor-grabbing'
+                : 'cursor-crosshair'
+              : 'cursor-default',
           )}
           style={{ display: 'block' }}
         />

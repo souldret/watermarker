@@ -1,10 +1,105 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 
 let mainWindow = null;
 let tray = null;
+
+// ─── Sharp entegrasyonu (opsiyonel — yoksa sessizce Canvas 2D fallback) ────────
+let sharpLib = null;
+function tryLoadSharp() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    sharpLib = require('sharp');
+    console.log('[sharp] Native modül yüklendi.');
+  } catch {
+    console.log('[sharp] Bulunamadı — Canvas 2D motoru kullanılacak.');
+    sharpLib = null;
+  }
+}
+
+/**
+ * Sharp ile watermark uygula.
+ * Renderer'dan gelen veriler: { imageBuffer, logoBuffer, logoWidth, logoHeight,
+ *   gravity, offsetX, offsetY, opacity, outputMime, quality }
+ * Döner: { buffer, mime } veya { error }
+ */
+async function applyWatermarkSharp(opts) {
+  if (!sharpLib) return { error: 'sharp yok' };
+  try {
+    const {
+      imageBuffer,
+      logoBuffer,
+      logoWidth,
+      logoHeight,
+      gravity = 'southeast',
+      offsetX = 24,
+      offsetY = 24,
+      opacity = 0.55,
+      outputMime = 'image/jpeg',
+      quality = 0.92,
+    } = opts;
+
+    const imgBuf = Buffer.from(imageBuffer);
+    const logoBuf = Buffer.from(logoBuffer);
+
+    // Logo'yu ölçekle (logoWidth/logoHeight zaten hesaplanmış gelir)
+    const resizedLogo = await sharpLib(logoBuf)
+      .resize(Math.max(1, Math.round(logoWidth)), Math.max(1, Math.round(logoHeight)), {
+        fit: 'fill',
+      })
+      .png()
+      .toBuffer();
+
+    // sharp gravity → numerik değil, string pozisyon
+    const gravityMap = {
+      tl: 'northwest', tc: 'north', tr: 'northeast',
+      ml: 'west',      mc: 'center', mr: 'east',
+      bl: 'southwest', bc: 'south', br: 'southeast',
+    };
+    const sharpGravity = gravityMap[gravity] || gravity;
+
+    let pipeline = sharpLib(imgBuf).composite([
+      {
+        input: resizedLogo,
+        gravity: sharpGravity,
+        top: gravity.includes('top') || gravity.startsWith('t') || gravity === 'northwest' || gravity === 'north' || gravity === 'northeast' ? offsetY : undefined,
+        left: gravity.includes('left') || gravity === 'northwest' || gravity === 'west' || gravity === 'southwest' ? offsetX : undefined,
+        blend: 'over',
+        // opacity: sharp 0.30+ destekliyor — daha eski sürümlerde yok
+        ...(typeof opacity === 'number' && opacity < 1 ? { opacity } : {}),
+      },
+    ]);
+
+    let outBuf;
+    if (outputMime === 'image/png') {
+      outBuf = await pipeline.png().toBuffer();
+    } else if (outputMime === 'image/webp') {
+      outBuf = await pipeline.webp({ quality: Math.round((quality || 0.85) * 100) }).toBuffer();
+    } else {
+      outBuf = await pipeline.jpeg({ quality: Math.round((quality || 0.92) * 100) }).toBuffer();
+    }
+
+    return { buffer: outBuf, mime: outputMime };
+  } catch (err) {
+    return { error: err.message || 'Sharp işlem hatası' };
+  }
+}
+
+// ─── IPC Handlers ──────────────────────────────────────────────────────────────
+
+function registerIpcHandlers() {
+  /** sharp mevcudiyetini sorgula */
+  ipcMain.handle('sharp:available', () => sharpLib !== null);
+
+  /** Sharp ile watermark uygula */
+  ipcMain.handle('sharp:applyWatermark', async (_event, opts) => {
+    return applyWatermarkSharp(opts);
+  });
+}
+
+// ─── Entry point ──────────────────────────────────────────────────────────────
 
 function resolveEntry() {
   // 1) Açık dev sunucu
@@ -43,7 +138,8 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false, // preload için sandbox kapalı (sharp IPC güvenli — sadece main'den)
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     title: 'Watermarker',
   });
@@ -136,6 +232,8 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    tryLoadSharp();
+    registerIpcHandlers();
     createWindow();
     createTray();
     app.on('activate', () => {

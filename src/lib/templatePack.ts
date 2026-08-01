@@ -1,5 +1,5 @@
 import type { AppPreset, TemplatePack } from './types';
-import { createPreset, loadPresets, mergeFilter, mergeSettings, savePresets } from './presets';
+import { createPreset, loadPresets, mergeFilter, mergeSettings, migratePreset, savePresets, CURRENT_SCHEMA_VERSION } from './presets';
 
 export function buildTemplatePack(opts: {
   name: string;
@@ -14,6 +14,7 @@ export function buildTemplatePack(opts: {
     presets: opts.presets,
     logoDataUrl: opts.logoDataUrl,
     logoFileName: opts.logoFileName,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
   };
 }
 
@@ -38,17 +39,19 @@ export function parseTemplatePack(text: string): TemplatePack {
 export function mergePresetsFromPack(pack: TemplatePack): AppPreset[] {
   const current = loadPresets();
   const incoming = pack.presets.map((p, idx) => {
-    const base = createPreset(
-      p.name || `Pack ${idx + 1}`,
-      mergeSettings(p.settings),
-      mergeFilter(p.pageFilter),
-    );
-    return base;
+    // Pack'ten gelen presetleri migrate et (eski şema sürümlü pack desteği)
+    const migrated = migratePreset(p as unknown as Record<string, unknown>);
+    // İsim yoksa fallback
+    if (!migrated.name) migrated.name = `Pack ${idx + 1}`;
+    return migrated;
   });
   const next = [...incoming, ...current].slice(0, 40);
   savePresets(next);
   return next;
 }
+
+// createPreset ve mergeSettings/mergeFilter kullanımları için re-export
+export { createPreset, mergeSettings, mergeFilter };
 
 export async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

@@ -12,7 +12,11 @@ export default function AdvancedOptions() {
   const setGifPolicy = useAppStore((s) => s.setGifPolicy);
   const setLargeFileMb = useAppStore((s) => s.setLargeFileMb);
   const patchTextWatermark = useAppStore((s) => s.patchTextWatermark);
+  const patchLongStripMode = useAppStore((s) => s.patchLongStripMode);
   const tw = settings.textWatermark ?? DEFAULT_TEXT_WATERMARK;
+  const lsm = settings.longStripMode;
+  // Serbest konum seçiliyken long-strip toggle disabled
+  const hasCustomXY = Boolean(settings.logo1CustomXY);
 
   return (
     <section className="panel space-y-3">
@@ -31,6 +35,59 @@ export default function AdvancedOptions() {
           <span className="mt-0.5 block text-[10px] text-ink-muted">{t('smart_pos_desc')}</span>
         </span>
       </label>
+
+      {/* Uzun şerit modu */}
+      <div className="border-t border-ink-border pt-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-ink-text">{t('long_strip_mode')}</span>
+          {lsm.enabled && (
+            <span className="text-[10px] text-ink-muted">
+              ×{lsm.aspectThreshold} · {lsm.repeatEveryPx}px
+            </span>
+          )}
+        </div>
+        <label
+          className={`flex items-center gap-2 text-xs ${hasCustomXY ? 'opacity-40 cursor-not-allowed' : 'text-ink-text'}`}
+          title={hasCustomXY ? t('long_strip_custom_xy_disabled') : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={lsm.enabled}
+            disabled={hasCustomXY}
+            onChange={(e) => patchLongStripMode({ enabled: e.target.checked })}
+          />
+          {t('long_strip_enabled')}
+        </label>
+        {hasCustomXY && (
+          <p className="text-[10px] text-amber-400/80">{t('long_strip_custom_xy_disabled')}</p>
+        )}
+        <div className={lsm.enabled && !hasCustomXY ? 'grid grid-cols-2 gap-2' : 'pointer-events-none grid grid-cols-2 gap-2 opacity-40'}>
+          <div>
+            <label className="mb-1 block text-[11px] text-ink-muted">{t('long_strip_threshold')}</label>
+            <input
+              type="number"
+              min={1.5}
+              max={20}
+              step={0.5}
+              className="select"
+              value={lsm.aspectThreshold}
+              onChange={(e) => patchLongStripMode({ aspectThreshold: Number(e.target.value) || 3 })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] text-ink-muted">{t('long_strip_repeat')}</label>
+            <input
+              type="number"
+              min={200}
+              max={5000}
+              step={100}
+              className="select"
+              value={lsm.repeatEveryPx}
+              onChange={(e) => patchLongStripMode({ repeatEveryPx: Number(e.target.value) || 1500 })}
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-ink-text">{t('gif_policy')}</label>
