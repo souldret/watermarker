@@ -6,6 +6,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { cn } from '@/lib/utils';
 import type { CustomXY } from '@/lib/types';
 
+/** Önizleme debounce süresi (slider gibi hızlı değişimlerde yeniden çizimi sınırlar) */
+const PAINT_DEBOUNCE_MS = 40;
+
 /** Büyük interaktif önizleme — tıklayarak logo konumunu belirle */
 export default function InteractivePreview() {
   const { t } = useI18n();
@@ -93,8 +96,6 @@ export default function InteractivePreview() {
   }, [previewImageUrl, logoSource, logo2Source, settings, pinTarget, hoverXY]);
 
   // Debounce wrapper — slider gibi hızlı ayar değişimlerinde gereksiz yeniden çizimi önler
-  // Hover/pin gibi interaktif durumlarda PAINT_DEBOUNCE_MS kadar gecikme kabul edilebilir
-  const PAINT_DEBOUNCE_MS = 40;
   const paint = useCallback(() => {
     if (paintTimerRef.current !== null) clearTimeout(paintTimerRef.current);
     paintTimerRef.current = setTimeout(() => {

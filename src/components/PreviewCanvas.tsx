@@ -115,8 +115,7 @@ export default function PreviewCanvas() {
       cancelAnimationFrame(frame);
       ro.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewImageUrl, logoSource, settings]);
+  }, [paintNow]);
 
   const shortName = previewPath?.split('/').pop() || '';
 
