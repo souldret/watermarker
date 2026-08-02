@@ -19,7 +19,7 @@ export function defaultCanvasFactory(w: number, h: number): CanvasRenderingConte
   try {
     if (typeof OffscreenCanvas !== 'undefined') {
       const oc = new OffscreenCanvas(w, h);
-      return oc.getContext('2d') as CanvasRenderingContext2D | null;
+      return oc.getContext('2d') as unknown as CanvasRenderingContext2D | null;
     }
     if (typeof document !== 'undefined') {
       const el = document.createElement('canvas');
