@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calcLogoRect, calcLogoSize, calcLogo2Rect, resolveCustomXY, buildEdgeAnchorXY } from '../watermark';
 import { pickSmartPosition } from '../smartPosition';
+import { makeMockCanvasFactory } from './helpers/mockCanvasFactory';
 import { filterChapterImages } from '../pageFilter';
 import { buildOutputFileName } from '../naming';
 import type { ImageFile, Logo2Settings, PageFilter } from '../types';
@@ -100,18 +101,21 @@ describe('naming', () => {
 
 describe('pickSmartPosition', () => {
   it('picks lowest activity region from mock context', () => {
-    const data = new Uint8ClampedArray(20 * 20 * 4);
-    // flat region
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = 10;
-      data[i + 1] = 10;
-      data[i + 2] = 10;
-      data[i + 3] = 255;
-    }
+    // Mock factory inject edilerek gercek DOM canvas'a hic dokunulmaz (Not implemented hatasi yok).
+    // Factory, kucuk bir canvas context simule eder; getImageData duz gri piksel doner.
+    const { factory } = makeMockCanvasFactory(100, 100, 'tl');
     const ctx = {
-      getImageData: () => ({ data, width: 20, height: 20 }),
+      canvas: { width: 100, height: 100 } as HTMLCanvasElement,
+      getImageData: () => {
+        const data = new Uint8ClampedArray(20 * 20 * 4);
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = 10; data[i + 1] = 10; data[i + 2] = 10; data[i + 3] = 255;
+        }
+        return { data, width: 20, height: 20 } as ImageData;
+      },
+      drawImage: () => {},
     } as unknown as CanvasRenderingContext2D;
-    const pos = pickSmartPosition(ctx, 100, 100, ['tl', 'br']);
+    const pos = pickSmartPosition(ctx, 100, 100, ['tl', 'br'], factory);
     expect(['tl', 'br']).toContain(pos);
   });
 });

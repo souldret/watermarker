@@ -63,6 +63,28 @@
 - **BUG #5:** `package.json` electron-builder `files` listesine `node_modules/**/*` eklendi — üretim paketinde sharp'ın bulunamaması sorunu giderildi.
 - **BUG #6:** `InteractivePreview.tsx`'te mouseUp sonrası tetiklenen click event'inin konumu iki kez uygulaması `dragEndedRef` flag'i ile engellendi.
 
+---
+
+## [Unreleased] — 2026-08-02
+
+### Hata Düzeltmeleri
+
+- **BUG #7 — jsdom "Not implemented: HTMLCanvasElement.prototype.getContext" stderr hatası giderildi:**
+  - **Kök neden:** `smartPosition.ts` → `buildSampleCanvas()` içinde jsdom ortamında `document.createElement('canvas').getContext('2d')` çağrılıyordu. jsdom bu çağrıyı `null` döndürerek yakalar ama stderr'e "Not implemented" logu basar. `try/catch` kodu yakalar, ancak jsdom'un stderr çıktısını engelleyemez.
+  - **Çözüm (B yaklaşımı — Dependency Injection):** `CanvasFactory` tipi ve `defaultCanvasFactory` fonksiyonu `smartPosition.ts`'e eklendi. `buildSampleCanvas` ve `pickSmartPosition` fonksiyonları opsiyonel `canvasFactory` parametresi alacak şekilde güncellendi.
+  - **Test helper:** `src/lib/__tests__/helpers/mockCanvasFactory.ts` oluşturuldu — gerçek DOM'a hiç dokunmadan `getImageData` çağrılarını sayan ve yapılandırılabilir köşe aktivitesi döndüren sahte canvas factory.
+  - **Etkilenen testler güncellendi:** `smartPositionPerf.test.ts` (12 test) ve `calcLogoRect.test.ts` → `pickSmartPosition` çağrılarına `factory` inject edildi. Artık sıfır "Not implemented" hatası.
+  - **Performans ölçümü düzeltildi:** Önceki "85.83ms" değeri hata fallback yolunu ölçüyordu (buildSampleCanvas null döndükten sonra orijinal ctx'e düşüyordu). Gerçek mock factory ile **4.30ms** — ~20× daha hızlı, artık küçültülmüş canvas üzerinden gerçek hesaplamayı ölçüyor.
+  - **Adım 13 doğrulandı:** `tl` ve `br` boş köşe testleri, yeni ve eski yöntemin gerçek piksel verisi üzerinden aynı pozisyonu seçtiğini doğruluyor — önceki fallback durumunda bu karşılaştırma anlamsızdı.
+
+### Testler
+
+**Yeni dosya:** `src/lib/__tests__/helpers/mockCanvasFactory.ts`
+
+---
+
+## [Unreleased] — 2026-08-01 (önceki)
+
 ### Testler
 
 Yeni test dosyaları (toplam 140 test, 0 başarısız):

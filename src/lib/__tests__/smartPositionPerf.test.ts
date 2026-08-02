@@ -8,6 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { pickSmartPosition } from '../smartPosition';
+import { makeMockCanvasFactory } from './helpers/mockCanvasFactory';
 import type { WatermarkPosition } from '../types';
 
 const ALL_POS: WatermarkPosition[] = ['tl', 'tr', 'bl', 'br', 'tc', 'bc', 'ml', 'mr', 'mc'];
@@ -108,42 +109,45 @@ function pickSmartPositionLegacy(
 // ─── Adım 12: Performans ölçümü ──────────────────────────────────────────────
 
 describe('ADIM 12 — SmartPosition performans (simüle bölge okuma sayisi)', () => {
-  it('YENİ yontem: 4000x6000 gorselde getImageData cagrisi sayisi <= 9 (1 canvas oncesi + 9 aday)', () => {
-    // Yeni yontem: once kucultulmus canvas olusturuyor (1 getImageData = drawImage cagrisi)
-    // sonra kucuk canvas uzerinden 9 aday icin 9 getImageData
-    // TOPLAM: makul olarak <= 9+1 = 10 cagri (kucuk canvas uzerinden)
+  it('YENİ yontem: 4000x6000 gorselde getImageData cagrisi sayisi <= 9 (mock factory ile)', () => {
+    // Mock factory inject edilince buildSampleCanvas basariyla kucuk bir ctx olusturur.
+    // Kucuk ctx uzerinden 9 aday icin 9 getImageData cagrisi yapilir (ctx.getImageData degil).
+    // ctx.getImageData cagrisi 0 olmali (sadece factory uzerindeki mock kullaniliyor).
+    const { factory, getImageDataCallCount } = makeMockCanvasFactory(4000, 6000, 'tl');
     const ctx = makeCtxMock(4000, 6000);
-    const callsBefore = (ctx.getImageData as ReturnType<typeof vi.fn>).mock.calls.length;
+    const ctxCallsBefore = (ctx.getImageData as ReturnType<typeof vi.fn>).mock.calls.length;
 
-    pickSmartPosition(ctx, 4000, 6000, ALL_POS);
+    pickSmartPosition(ctx, 4000, 6000, ALL_POS, factory);
 
-    const callsAfter = (ctx.getImageData as ReturnType<typeof vi.fn>).mock.calls.length;
-    const totalCalls = callsAfter - callsBefore;
+    const ctxCallsAfter = (ctx.getImageData as ReturnType<typeof vi.fn>).mock.calls.length;
+    const ctxDirectCalls = ctxCallsAfter - ctxCallsBefore;
+    const factoryCalls = getImageDataCallCount();
 
-    // Yeni yontem jsdom'da OffscreenCanvas + HTMLCanvas desteklenmez,
-    // bu yuzden buildSampleCanvas null donuyor ve DIREKT ctx uzerinden calisuyor.
-    // Bu durumda 9 aday icin 9 getImageData cagrisi beklenir.
-    // Onemli: KILITLENME veya sonsuz dongu olmadigini ve sonucun dogru ciktigini kanitliyoruz.
-    expect(totalCalls).toBeLessThanOrEqual(9);
-    expect(totalCalls).toBeGreaterThan(0);
+    // Factory uzerinden 9 aday icin 9 cagri beklenir
+    expect(factoryCalls).toBeLessThanOrEqual(9);
+    expect(factoryCalls).toBeGreaterThan(0);
+    // Orijinal ctx'e direkt getImageData gitmemeli (kucuk canvas kullaniliyor)
+    expect(ctxDirectCalls).toBe(0);
   });
 
   it('8x8 gorsel → candidates[0] fallback, getImageData cagrisi yok veya az', () => {
+    const { factory } = makeMockCanvasFactory(8, 8);
     const ctx = makeCtxMock(8, 8);
-    const result = pickSmartPosition(ctx, 8, 8, ALL_POS);
+    const result = pickSmartPosition(ctx, 8, 8, ALL_POS, factory);
     // 8x8 === sinir degeri (>= 8 sart), hala secim yapilmali
     expect(ALL_POS).toContain(result);
   });
 
-  it('Yeni yontem performans suresi: 1000ms altinda tamamlanmali (jsdom)', () => {
+  it('Yeni yontem performans suresi: 1000ms altinda tamamlanmali (mock factory)', () => {
+    const { factory } = makeMockCanvasFactory(4000, 6000, 'tl');
     const ctx = makeCtxMock(4000, 6000);
     const t0 = performance.now();
-    pickSmartPosition(ctx, 4000, 6000, ALL_POS);
+    pickSmartPosition(ctx, 4000, 6000, ALL_POS, factory);
     const elapsed = performance.now() - t0;
-    // jsdom ortaminda (gercek canvas yok), sadece mock hesaplama → cok hizli olmali
+    // Mock factory ile sadece JS hesaplama → cok hizli olmali
     expect(elapsed).toBeLessThan(1000);
-    // Gercek sure raporlama amacli:
-    console.log(`[ADIM 12] pickSmartPosition(4000x6000) suresi: ${elapsed.toFixed(2)}ms`);
+    // Gercek sure raporlama amacli (onceki "85.83ms" dezerinden fark gozlemlenebilir):
+    console.log(`[ADIM 12] pickSmartPosition(4000x6000) suresi (mock factory): ${elapsed.toFixed(2)}ms`);
   });
 });
 
@@ -151,10 +155,12 @@ describe('ADIM 12 — SmartPosition performans (simüle bölge okuma sayisi)', (
 
 describe('ADIM 13 — Dogru pozisyon secimi (regresyon testi)', () => {
   it('tl kose bos iken → yeni ve eski yontem AYNI pozisyonu secer (tl)', () => {
+    // Mock factory: kucuk canvas uzerinden TL bos kosesi ile gercek piksel verisi uretir
+    const { factory } = makeMockCanvasFactory(800, 600, 'tl');
     const ctx = makeCtxMock(800, 600, 'tl');
-    const newResult = pickSmartPosition(ctx, 800, 600, ALL_POS);
+    const newResult = pickSmartPosition(ctx, 800, 600, ALL_POS, factory);
 
-    // Eski yontem ile karsilastir (ayni ctx mock)
+    // Eski yontem ile karsilastir (ayni ctx mock — direkt ctx.getImageData kullanir)
     const legacyResult = pickSmartPositionLegacy(ctx, 800, 600, ALL_POS);
 
     // Her ikisi de bos koseyi (tl) secmeli
@@ -165,8 +171,9 @@ describe('ADIM 13 — Dogru pozisyon secimi (regresyon testi)', () => {
   });
 
   it('br kose bos iken → yeni ve eski yontem AYNI pozisyonu secer (br)', () => {
+    const { factory } = makeMockCanvasFactory(800, 600, 'br');
     const ctx = makeCtxMock(800, 600, 'br');
-    const newResult = pickSmartPosition(ctx, 800, 600, ALL_POS);
+    const newResult = pickSmartPosition(ctx, 800, 600, ALL_POS, factory);
     const legacyResult = pickSmartPositionLegacy(ctx, 800, 600, ALL_POS);
 
     expect(newResult).toBe('br');
@@ -175,14 +182,16 @@ describe('ADIM 13 — Dogru pozisyon secimi (regresyon testi)', () => {
   });
 
   it('Tek aday secilince o aday doner (fallback dogrulamasi)', () => {
+    const { factory } = makeMockCanvasFactory(800, 600);
     const ctx = makeCtxMock(800, 600);
-    const result = pickSmartPosition(ctx, 800, 600, ['mc']);
+    const result = pickSmartPosition(ctx, 800, 600, ['mc'], factory);
     expect(result).toBe('mc');
   });
 
   it('Bos candidates dizisi → candidates[0] || "br" fallback', () => {
+    const { factory } = makeMockCanvasFactory(800, 600);
     const ctx = makeCtxMock(800, 600);
-    const result = pickSmartPosition(ctx, 800, 600, [] as WatermarkPosition[]);
+    const result = pickSmartPosition(ctx, 800, 600, [] as WatermarkPosition[], factory);
     expect(result).toBe('br');
   });
 });
@@ -191,30 +200,35 @@ describe('ADIM 13 — Dogru pozisyon secimi (regresyon testi)', () => {
 
 describe('ADIM 14 — Cok kucuk gorsel → crash yok', () => {
   it('7x7 (< 8) → candidates[0] fallback, hata yok', () => {
+    const { factory } = makeMockCanvasFactory(7, 7);
     const ctx = makeCtxMock(7, 7);
-    expect(() => pickSmartPosition(ctx, 7, 7, ALL_POS)).not.toThrow();
-    const result = pickSmartPosition(ctx, 7, 7, ALL_POS);
+    expect(() => pickSmartPosition(ctx, 7, 7, ALL_POS, factory)).not.toThrow();
+    const result = pickSmartPosition(ctx, 7, 7, ALL_POS, factory);
     expect(result).toBe(ALL_POS[0]); // fallback
   });
 
   it('1x1 → fallback, hata yok', () => {
+    const { factory } = makeMockCanvasFactory(1, 1);
     const ctx = makeCtxMock(1, 1);
-    expect(() => pickSmartPosition(ctx, 1, 1, ALL_POS)).not.toThrow();
+    expect(() => pickSmartPosition(ctx, 1, 1, ALL_POS, factory)).not.toThrow();
   });
 
   it('0x0 → fallback, hata yok', () => {
+    const { factory } = makeMockCanvasFactory(0, 0);
     const ctx = makeCtxMock(0, 0);
-    expect(() => pickSmartPosition(ctx, 0, 0, ALL_POS)).not.toThrow();
+    expect(() => pickSmartPosition(ctx, 0, 0, ALL_POS, factory)).not.toThrow();
   });
 
   it('negatif boyut → fallback, hata yok', () => {
+    const { factory } = makeMockCanvasFactory(0, 0);
     const ctx = makeCtxMock(0, 0);
-    expect(() => pickSmartPosition(ctx, -100, -200, ALL_POS)).not.toThrow();
+    expect(() => pickSmartPosition(ctx, -100, -200, ALL_POS, factory)).not.toThrow();
   });
 
   it('8x8 sinir deger → fallback degil, hesaplama yapilir', () => {
+    const { factory } = makeMockCanvasFactory(8, 8, 'tl');
     const ctx = makeCtxMock(8, 8, 'tl');
-    const result = pickSmartPosition(ctx, 8, 8, ALL_POS);
+    const result = pickSmartPosition(ctx, 8, 8, ALL_POS, factory);
     // Crashsiz tamamlanmali, sonuc gecerli pozisyon olmali
     expect(ALL_POS).toContain(result);
   });

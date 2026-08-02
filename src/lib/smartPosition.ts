@@ -4,15 +4,46 @@ import type { WatermarkPosition } from './types';
 const SAMPLE_MAX_W = 400;
 
 /**
+ * Canvas factory tipi — test ortamında dependency injection ile mock'lanabilir.
+ * (w, h) boyutlarında 2D context döndürmeli; başarısız olursa null döndürmeli.
+ */
+export type CanvasFactory = (w: number, h: number) => CanvasRenderingContext2D | null;
+
+/**
+ * Varsayılan canvas factory: OffscreenCanvas (Worker/modern tarayıcı) veya
+ * HTMLCanvasElement (document mevcut) kullanır.
+ * jsdom / headless ortamda HTMLCanvasElement.getContext('2d') null döner —
+ * bu durumda null dönerek pickSmartPosition'ın orijinal ctx'e fallback yapmasını sağlar.
+ */
+export function defaultCanvasFactory(w: number, h: number): CanvasRenderingContext2D | null {
+  try {
+    if (typeof OffscreenCanvas !== 'undefined') {
+      const oc = new OffscreenCanvas(w, h);
+      return oc.getContext('2d') as CanvasRenderingContext2D | null;
+    }
+    if (typeof document !== 'undefined') {
+      const el = document.createElement('canvas');
+      el.width = w;
+      el.height = h;
+      return el.getContext('2d');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verilen canvas/context'ten küçültülmüş bir örnekleme canvas'ı oluşturur.
  * Zaten küçük ise orijinal boyutu kullanır.
- * OffscreenCanvas yoksa normal HTMLCanvasElement fallback.
+ * canvasFactory parametresi ile test ortamında mock context enjekte edilebilir.
  */
 function buildSampleCanvas(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-): { sCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D; sW: number; sH: number } | null {
+  canvasFactory: CanvasFactory = defaultCanvasFactory,
+): { sCtx: CanvasRenderingContext2D; sW: number; sH: number } | null {
   if (width < 1 || height < 1) return null;
 
   const scale = Math.min(1, SAMPLE_MAX_W / width);
@@ -20,22 +51,11 @@ function buildSampleCanvas(
   const sH = Math.max(1, Math.round(height * scale));
 
   try {
-    let sCanvas: HTMLCanvasElement | OffscreenCanvas;
-    if (typeof OffscreenCanvas !== 'undefined') {
-      sCanvas = new OffscreenCanvas(sW, sH);
-    } else if (typeof document !== 'undefined') {
-      sCanvas = document.createElement('canvas');
-      sCanvas.width = sW;
-      sCanvas.height = sH;
-    } else {
-      return null;
-    }
-
-    const sCtx = sCanvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    const sCtx = canvasFactory(sW, sH);
     if (!sCtx) return null;
 
     // Orijinal canvas içeriğini küçük canvas'a çiz
-    (sCtx as CanvasRenderingContext2D).drawImage(
+    sCtx.drawImage(
       ctx.canvas,
       0, 0, width, height,
       0, 0, sW, sH,
@@ -60,11 +80,12 @@ export function pickSmartPosition(
   width: number,
   height: number,
   candidates: WatermarkPosition[] = ['tl', 'tr', 'bl', 'br', 'tc', 'bc', 'ml', 'mr', 'mc'],
+  canvasFactory: CanvasFactory = defaultCanvasFactory,
 ): WatermarkPosition {
   if (width < 8 || height < 8) return candidates[0] || 'br';
 
   // Küçük canvas oluştur — başarısız olursa orijinal ctx'e fallback
-  const sample = buildSampleCanvas(ctx, width, height);
+  const sample = buildSampleCanvas(ctx, width, height, canvasFactory);
   const sCtx = sample ? sample.sCtx : ctx;
   const sW = sample ? sample.sW : width;
   const sH = sample ? sample.sH : height;
