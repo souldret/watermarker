@@ -141,6 +141,9 @@ const dict = {
     batch_preview_grid: 'Toplu Önizleme',
     batch_preview_pages: 'sayfa',
     drag_to_place: 'Tutup sürükle',
+    donate: 'Bağış Yap',
+    donate_title: 'Geliştiriciyi destekle',
+    donate_hint: 'Kreosus üzerinden destek ol',
   },
   en: {
     app_title: 'Watermarker',
@@ -282,6 +285,9 @@ const dict = {
     batch_preview_grid: 'Batch Preview',
     batch_preview_pages: 'pages',
     drag_to_place: 'Hold and drag to place',
+    donate: 'Donate',
+    donate_title: 'Support the developer',
+    donate_hint: 'Support via Kreosus',
   },
 } as const;
 

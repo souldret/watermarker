@@ -1,4 +1,4 @@
-import { Moon, Stamp, Sun } from 'lucide-react';
+import { Heart, Moon, Stamp, Sun } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useI18n } from '@/hooks/useI18n';
 import { cn } from '@/lib/utils';
@@ -63,6 +63,17 @@ export default function Header() {
           >
             {t('compact')}
           </button>
+
+          <a
+            href="https://kreosus.com/mangaruhu"
+            target="_blank"
+            rel="noopener noreferrer"
+            title={t('donate_hint')}
+            className="flex items-center gap-1.5 rounded-md border border-pink-500/40 bg-pink-500/10 px-2.5 py-1 text-[10px] font-semibold text-pink-400 transition-colors hover:border-pink-500/70 hover:bg-pink-500/20 hover:text-pink-300"
+          >
+            <Heart className="h-3 w-3 fill-current" />
+            {t('donate')}
+          </a>
 
           <span className="hidden rounded-full border border-seal/30 bg-seal/10 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-seal sm:inline">
             {t('offline')}
