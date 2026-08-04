@@ -1,5 +1,12 @@
 # Watermarker
 
+> 🇹🇷 [Türkçe](#türkçe) &nbsp;|&nbsp; 🇬🇧 [English](#english)
+
+---
+
+<a name="türkçe"></a>
+# 🇹🇷 Türkçe
+
 Manga ve manhwa bölüm görsellerine logo / metin watermark basan, **tarayıcıda çalışan** (client-side) bir araç.
 
 Seri klasörünü seç → ayarları yap → tekli veya çoklu bas → **ZIP indir** veya **klasöre yaz**.
@@ -8,6 +15,13 @@ Seri klasörünü seç → ayarları yap → tekli veya çoklu bas → **ZIP ind
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](#lisans)
+[![Kreosus](https://img.shields.io/badge/Destek-Kreosus-e75480?logo=ko-fi&logoColor=white)](https://kreosus.com/mangaruhu)
+
+### ❤️ Geliştiriciyi Destekle
+
+Bu araç ücretsiz ve açık kaynaklıdır. Beğendiysen Kreosus üzerinden destek olabilirsin:
+
+**👉 [kreosus.com/mangaruhu](https://kreosus.com/mangaruhu)**
 
 ---
 
@@ -20,7 +34,7 @@ Seri klasörünü seç → ayarları yap → tekli veya çoklu bas → **ZIP ind
 - **9 noktalı konum ızgarası** — çoklu nokta seçimi (ör. sol üst + sağ alt)
 - **Boyut** — görsel genişliğine göre **%** veya sabit **px**
 - **Opaklık, kenar boşluğu, döndürme** (−45°…+45°)
-- **Çıktı formatı** — orijinal / JPEG / PNG / WebP + kalite preset’leri
+- **Çıktı formatı** — orijinal / JPEG / PNG / WebP + kalite preset'leri
 - **ZIP indirme** veya **klasöre yazma** (Chrome / Edge File System Access API)
 - **Canlı önizleme** — listeden sayfa seçerek konum/ölçek kontrolü
 
@@ -43,7 +57,7 @@ Seri klasörünü seç → ayarları yap → tekli veya çoklu bas → **ZIP ind
 - **Electron** masaüstü (tray, portable / installer)
 
 ### Güvenlik / gizlilik
-- Görseller **sunucuya yüklenmez**; işlem tarayıcıda (veya Electron’da lokal) yapılır.
+- Görseller **sunucuya yüklenmez**; işlem tarayıcıda (veya Electron'da lokal) yapılır.
 
 ---
 
@@ -69,7 +83,7 @@ Seri Adı/
 
 Çıktı ZIP / klasör yapısı bölüm hiyerarşisini korur.
 
-**Görseller:** `.jpg` `.jpeg` `.png` `.webp` `.bmp` `.gif`  
+**Görseller:** `.jpg` `.jpeg` `.png` `.webp` `.bmp` `.gif`
 **Logo:** şeffaf PNG tercih; WebP / SVG desteklenir.
 
 ---
@@ -165,32 +179,11 @@ node cli/watermarker.mjs --input "./seri" --logo "./logo.png" --batch --out "./o
 | `--opacity` | 0–1 |
 | `--pos` | `tl` `tc` `tr` `ml` `mc` `mr` `bl` `bc` `br` |
 
-> CLI’de gerçek basım için isteğe bağlı `sharp` kurulabilir. Yoksa dosyalar kopyalanır ve uyarı verilir.
+> CLI'de gerçek basım için isteğe bağlı `sharp` kurulabilir. Yoksa dosyalar kopyalanır ve uyarı verilir.
 
 ```bash
 npm i sharp
 ```
-
----
-
-## Electron (masaüstü)
-
-```bat
-build.bat
-electron-run.bat
-```
-
-Kurulum / portable paket:
-
-```bat
-package-electron.bat
-```
-
-Çıktılar:
-- `release/electron/` — NSIS installer
-- `Watermarker-*-portable.exe` — portable
-
-İlk paketlemede internet gerekir (electron-builder indirmeleri).
 
 ---
 
@@ -230,65 +223,22 @@ watermarker/
 
 ---
 
-## Ayarlar ve preset’ler
-
-- **Preset’ler** tarayıcı `localStorage` içinde saklanır.
-- **Şablon paketi** (`.watermarker.json`) ile ekip logosu + preset’ler paylaşılabilir.
-- **İsimlendirme şablonu** değişkenleri:
-  - `{chapter}` — bölüm adı
-  - `{index}` — 001, 002…
-  - `{name}` — orijinal dosya adı (uzantısız)
-  - `{ext}` — uzantı
-
-Örnek: `{chapter}_{index}_{name}` → `Bolum01_001_page`
-
----
-
 ## Tarayıcı desteği
 
 | Özellik | Chrome / Edge | Firefox | Safari |
 |---------|---------------|---------|--------|
 | Temel watermark + ZIP | ✅ | ✅ | ✅ |
 | Klasör seçici (modern API) | ✅ | Kısmi / yedek | Kısmi / yedek |
-| Klasöre yazma | ✅ | ❌ (ZIP’e düşer) | ❌ (ZIP’e düşer) |
+| Klasöre yazma | ✅ | ❌ (ZIP'e düşer) | ❌ (ZIP'e düşer) |
 | Sürükle-bırak dizin | ✅ (Chromium) | Sınırlı | Sınırlı |
-
-Klasör API yoksa uygulama `webkitdirectory` yedek seçicisine geçer.
-
----
-
-## Geliştirme
-
-```bash
-git clone https://github.com/souldret/watermarker.git
-cd watermarker
-npm install
-npm run dev
-```
-
-Kontroller:
-```bash
-npm run check   # TypeScript
-npm test        # Vitest
-npm run build   # Production
-```
-
----
-
-## Bilinen sınırlar
-
-- GIF animasyonu desteklenmez (politika: atla veya ilk kare).
-- Çok büyük / çok uzun manhwa strip’lerinde bellek tarayıcıya bağlıdır.
-- ZIP’ten “devam” yalnızca kalan dosyaları yeni pakete koyar (önceki kısmi ZIP ayrı kalır).
-- Klasöre yazma için güvenilir deneyim Chrome / Edge üzerindedir.
 
 ---
 
 ## Katkı
 
-1. Fork’la
+1. Fork'la
 2. Feature branch aç (`git checkout -b feature/xyz`)
-3. Commit’le
+3. Commit'le
 4. PR aç
 
 Öneri ve hata bildirimi için GitHub Issues kullanabilirsin.
@@ -304,5 +254,264 @@ MIT — özgürce kullan, değiştir, dağıt.
 ## Teşekkür
 
 Manga / manhwa çeviri ekipleri ve offline araç ihtiyaçları için tasarlandı.
+
+**Repo:** https://github.com/souldret/watermarker
+
+---
+
+---
+
+<a name="english"></a>
+# 🇬🇧 English
+
+A **client-side** (browser-based) tool for stamping logo / text watermarks onto manga and manhwa chapter images.
+
+Pick a folder → configure settings → stamp single or batch → **download ZIP** or **write to folder**.
+
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](#license)
+[![Kreosus](https://img.shields.io/badge/Support-Kreosus-e75480?logo=ko-fi&logoColor=white)](https://kreosus.com/mangaruhu)
+
+### ❤️ Support the Developer
+
+This tool is free and open-source. If you find it useful, consider supporting via Kreosus:
+
+**👉 [kreosus.com/mangaruhu](https://kreosus.com/mangaruhu)**
+
+---
+
+## Features
+
+### Core
+- **Single mode** — all images in one chapter folder
+- **Batch mode** — processes every chapter subfolder in a series folder
+- **Logo watermark** — PNG / WebP / SVG (transparent PNG recommended)
+- **9-point position grid** — multi-point selection (e.g. top-left + bottom-right)
+- **Size** — **%** of image width or fixed **px**
+- **Opacity, margin, rotation** (−45°…+45°)
+- **Output format** — original / JPEG / PNG / WebP + quality presets
+- **ZIP download** or **write to folder** (Chrome / Edge File System Access API)
+- **Live preview** — pick a page from the list to check position/scale
+
+### Advanced
+- **Page filters** — first/last N, cover only, range, skip by name (`credit`, `thanks`…)
+- **Save / load presets** — `localStorage`
+- **Template pack** — preset + logo JSON import/export
+- **Text watermark** — `@team`, Discord, etc.
+- **Smart position** — prefers empty edges (basic entropy)
+- **GIF policy** — skip / first frame / warn + first frame
+- **Large file warning** — configurable MB threshold
+- **Naming** — original, `_wm`, `wm_`, `Chapter_001`, custom template
+- **Cancel + checkpoint** — resume where you left off
+- **Error report** — JSON / CSV
+- **Run summary** — duration, img/s, input/output size
+- **TR / EN UI**, **dark / light**, **compact** mode
+- **Setup wizard** (first launch)
+- **Drag-and-drop folder**
+- **CLI** (`cli/watermarker.mjs`)
+- **Electron** desktop app (tray, portable / installer)
+
+### Privacy / Security
+- Images are **never uploaded** to a server; everything runs in the browser (or locally in Electron).
+
+---
+
+## Supported folder structure
+
+### Single
+```text
+Chapter 01/
+  001.jpg
+  002.jpg
+  003.png
+```
+
+### Batch (series)
+```text
+Series Name/
+  Chapter 01/
+    001.jpg
+    002.jpg
+  Chapter 02/
+    001.jpg
+```
+
+Output ZIP / folder preserves the chapter hierarchy.
+
+**Images:** `.jpg` `.jpeg` `.png` `.webp` `.bmp` `.gif`
+**Logo:** transparent PNG preferred; WebP / SVG supported.
+
+---
+
+## Quick start (Windows)
+
+### 1) Requirement
+- [Node.js](https://nodejs.org/) **18+** (LTS recommended)
+
+### 2) Install
+```bat
+install.bat
+```
+or:
+```bash
+npm install
+```
+
+### 3) Dev server
+```bat
+run.bat
+```
+Browser: `http://127.0.0.1:5173/`
+
+### 4) Usage summary
+1. Upload a logo (or enable text watermark)
+2. Set position / size / opacity
+3. Choose **Single** or **Batch**
+4. Pick chapter or series folder (drag-and-drop works too)
+5. **Apply Watermark** → download ZIP or write to folder
+
+---
+
+## Bat files
+
+| File | Description |
+|------|-------------|
+| `install.bat` | Install dependencies |
+| `run.bat` | Dev server (Vite) |
+| `build.bat` | Production build → `dist/` |
+| `preview.bat` | Preview `dist` (port 4173) |
+| `export-web.bat` | Web folder + ZIP → `release/` |
+| `package-electron.bat` | Windows NSIS installer + portable EXE |
+| `package-electron-dir.bat` | Fast unpacked Electron (testing) |
+| `electron-run.bat` | Open app with Electron |
+| `export-all.bat` | Web ZIP + full Electron package |
+| `test.bat` | Typecheck + unit tests |
+| `clean.bat` | Clean `dist` / `release` |
+
+---
+
+## npm scripts
+
+```bash
+# Development
+npm run dev
+
+# Build
+npm run build
+npm run preview
+
+# Quality
+npm run check
+npm test
+
+# Web release ZIP
+npm run pack:release
+
+# Electron
+npm run electron
+npm run dist:electron
+npm run dist:electron:dir
+
+# CLI
+npm run cli -- --help
+```
+
+---
+
+## CLI
+
+```bash
+node cli/watermarker.mjs --input "./series" --logo "./logo.png" --batch --out "./out"
+```
+
+| Option | Description |
+|--------|-------------|
+| `--input`, `-i` | Source folder |
+| `--logo`, `-l` | Logo file |
+| `--batch`, `-b` | Series mode (subfolders = chapters) |
+| `--out`, `-o` | Output folder (default: `<input>_wm`) |
+| `--size` | Logo width percentage (default 12) |
+| `--opacity` | 0–1 |
+| `--pos` | `tl` `tc` `tr` `ml` `mc` `mr` `bl` `bc` `br` |
+
+> Optionally install `sharp` for real stamping in CLI mode. Without it, files are copied with a warning.
+
+```bash
+npm i sharp
+```
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|-------|------------|
+| UI | React 18, TypeScript, Tailwind CSS |
+| State | Zustand |
+| Build | Vite 6 |
+| Watermark | HTML Canvas 2D |
+| ZIP | JSZip |
+| Tests | Vitest + jsdom |
+| Desktop | Electron + electron-builder |
+| CLI | Node.js |
+
+---
+
+## Project structure
+
+```text
+watermarker/
+├── cli/                 # CLI tool
+├── electron/            # Electron main process
+├── scripts/             # Release / export scripts
+├── src/
+│   ├── components/      # UI panels
+│   ├── hooks/           # i18n etc.
+│   ├── lib/             # Watermark engine, scanner, pipeline, tests
+│   ├── pages/           # Main page
+│   └── store/           # Zustand store
+├── public/
+├── *.bat                # Windows helpers
+├── package.json
+└── README.md
+```
+
+---
+
+## Browser support
+
+| Feature | Chrome / Edge | Firefox | Safari |
+|---------|---------------|---------|--------|
+| Core watermark + ZIP | ✅ | ✅ | ✅ |
+| Folder picker (modern API) | ✅ | Partial / fallback | Partial / fallback |
+| Write to folder | ✅ | ❌ (falls back to ZIP) | ❌ (falls back to ZIP) |
+| Drag-and-drop directory | ✅ (Chromium) | Limited | Limited |
+
+If the Folder API is unavailable the app falls back to a `webkitdirectory` picker.
+
+---
+
+## Contributing
+
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/xyz`)
+3. Commit your changes
+4. Open a PR
+
+Use GitHub Issues for bug reports and feature requests.
+
+---
+
+## License
+
+MIT — free to use, modify, and distribute.
+
+---
+
+## Acknowledgements
+
+Designed for manga / manhwa translation teams who need a fast, offline watermarking tool.
 
 **Repo:** https://github.com/souldret/watermarker
