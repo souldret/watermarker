@@ -4,7 +4,7 @@
  * thumbnail olarak gösterir. Kullanıcı "tek sayfada iyi görünen ayar
  * diğerlerinde nasıl duruyor" sorusunu global ayar değiştirmeden görebilir.
  */
-import { useEffect, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { Grid3x3, ImageIcon } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { drawPreview } from '@/lib/watermark';
@@ -47,7 +47,7 @@ interface ThumbCanvasProps {
   label: string;
 }
 
-function ThumbCanvas({ file, label }: ThumbCanvasProps) {
+const ThumbCanvas = memo(function ThumbCanvas({ file, label }: ThumbCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,11 +90,17 @@ function ThumbCanvas({ file, label }: ThumbCanvasProps) {
       imgRef.current = img;
       paint();
     };
-    img.onerror = () => { imgRef.current = null; };
+    img.onerror = () => {
+      if (cancelled) return;
+      imgRef.current = null;
+    };
     img.src = url;
     return () => {
       cancelled = true;
       URL.revokeObjectURL(url);
+      // Decode edilmekte olan görsel verisini serbest bırak.
+      img.onload = null;
+      img.onerror = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
@@ -121,18 +127,16 @@ function ThumbCanvas({ file, label }: ThumbCanvasProps) {
       </span>
     </div>
   );
-}
+});
 
 export default function BatchPreviewGrid() {
   const { t } = useI18n();
   const chapters = useAppStore((s) => s.chapters);
 
-  const pages = useMemo(
-    () => selectRepresentativePages(chapters, 5),
-    // Bölüm listesi değişince yeniden hesapla (referans karşılaştırması yeterli)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chapters.length, chapters.map((c) => c.images.length).join(',')],
-  );
+  // chapters referansı, setChapters her çağrıldığında zaten yeni bir array
+  // olur (bkz. useAppStore.ts) — bu yüzden [chapters] bağımlılığı, her render'da
+  // .map().join() ile yeni bir string üretmekten daha ucuz ve eşit derecede doğrudur.
+  const pages = useMemo(() => selectRepresentativePages(chapters, 5), [chapters]);
 
   if (pages.length === 0) return null;
 

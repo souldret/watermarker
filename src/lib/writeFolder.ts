@@ -23,6 +23,7 @@ export async function writeBlobToTree(
 ): Promise<void> {
   const safeChapter = chapterName.replace(/[<>:"/\\|?*]/g, '_').trim() || 'bolum';
   const safeFile =
+    // eslint-disable-next-line no-control-regex -- dosya adindan kontrol karakterlerini temizler
     fileName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim() || 'image.jpg';
   const chapterDir = await ensureDir(root, safeChapter);
   const fileHandle = await chapterDir.getFileHandle(safeFile, { create: true });

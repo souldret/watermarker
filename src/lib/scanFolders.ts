@@ -69,7 +69,7 @@ export async function scanFromDirectoryHandle(
           }
         })();
 
-  for await (const [name, handle] of iterable) {
+  for await (const [, handle] of iterable) {
     if (handle.kind === 'directory') {
       subdirs.push(handle as FileSystemDirectoryHandle);
     }

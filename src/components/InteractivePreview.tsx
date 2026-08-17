@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Crosshair, Maximize2, X, MousePointer2, Info } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { buildEdgeAnchorXY, drawPreview } from '@/lib/watermark';
@@ -10,7 +10,7 @@ import type { CustomXY } from '@/lib/types';
 const PAINT_DEBOUNCE_MS = 40;
 
 /** Büyük interaktif önizleme — tıklayarak logo konumunu belirle */
-export default function InteractivePreview() {
+function InteractivePreview() {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,21 +41,90 @@ export default function InteractivePreview() {
   // Sürükleme sırasında ghost önizlemesi (0-1 oranı)
   const [ghostXY, setGhostXY] = useState<{ x: number; y: number } | null>(null);
 
-  const getMaxDims = () => {
+  // Container boyutu — sadece ResizeObserver tetiklendiğinde güncellenir.
+  // Her paintNow çağrısında getBoundingClientRect() çağırmak layout thrashing'e
+  // yol açabildiği için (senkron reflow), bu değer bir ref'te cache'lenir.
+  const maxDimsRef = useRef<{ maxW: number; maxH: number }>({ maxW: 520, maxH: 720 });
+
+  const recalcMaxDims = useCallback(() => {
     const container = containerRef.current;
-    if (!container) return { maxW: 520, maxH: 720 };
+    if (!container) return;
     const rect = container.getBoundingClientRect();
     // maxH, uzun görsellerde scale hesabında kullanılmıyor (scroll ile handle edilir)
     // Yalnızca aşırı uzun şeritlerde alt sınır için iletilir
-    return {
+    maxDimsRef.current = {
       maxW: Math.max(200, rect.width - 4),
       maxH: Math.max(200, rect.height - 4),
     };
-  };
+  }, []);
 
   const paintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Çekirdek çizim fonksiyonu — her zaman anında çalışır
+  /**
+   * Sadece hover/ghost crosshair overlay'ini çizer — watermark'ı YENİDEN
+   * ÇİZMEZ. Bu ayrım kritik: fare hareketi (mousemove) yüksek frekansta
+   * tetiklendiği için, her hareket için tam bir watermark render'ı (calcLogoRects,
+   * drawImage vb.) yapmak CPU'yu gereksiz yere yorar. Overlay, base çizimin
+   * ÜZERİNE eklenir; bu yüzden base'in bozulmaması için her overlay çağrısından
+   * önce base yeniden çizilmeli — ancak bu maliyetli taban çizimi yalnızca
+   * previewImageUrl/logo/settings değiştiğinde (drawBase) yapılır, hover'da
+   * sadece son çizilmiş taban üzerine overlay eklenir (offscreen cache).
+   */
+  const baseSnapshotRef = useRef<ImageData | null>(null);
+
+  const drawOverlay = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Taban görüntüyü (watermark render sonucu) snapshot'tan geri yükle —
+    // böylece overlay çizmeden önce watermark'ı yeniden hesaplamamıza gerek kalmaz.
+    if (baseSnapshotRef.current) {
+      ctx.putImageData(baseSnapshotRef.current, 0, 0);
+    }
+
+    const overlayXY = ghostXY || hoverXY;
+    if (!pinTarget || !overlayXY) return;
+
+    const cssW = parseFloat(canvas.style.width) || canvas.width;
+    const cssH = parseFloat(canvas.style.height) || canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    const cx = overlayXY.x * cssW;
+    const cy = overlayXY.y * cssH;
+    const color = pinTarget === 'logo1' ? 'rgba(255,77,77,0.85)' : 'rgba(80,180,255,0.85)';
+    const colorFill = pinTarget === 'logo1' ? 'rgba(255,77,77,0.25)' : 'rgba(80,180,255,0.25)';
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1 / dpr;
+
+    if (isDraggingRef.current && ghostXY) {
+      // Sürükleme: crosshair yerine ghost logo kutusu göster
+      const logo = pinTarget === 'logo1' ? logoSource : logo2Source;
+      const ghostW = logo ? Math.round(cssW * 0.15) : 40;
+      const ghostH = logo ? Math.round(ghostW * (logo.height / Math.max(1, logo.width))) : 24;
+      ctx.setLineDash([3, 2]);
+      ctx.strokeRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
+      ctx.fillStyle = colorFill;
+      ctx.fillRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Normal crosshair
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cssH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cssW, cy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }, [pinTarget, hoverXY, ghostXY, logoSource, logo2Source]);
+
+  // Çekirdek çizim fonksiyonu — watermark tabanını yeniden hesaplar (ağır).
+  // Sadece previewImageUrl/logo/settings değiştiğinde çağrılmalı — hover/ghost
+  // değişiminde ÇAĞRILMAZ (bkz. drawOverlay).
   const paintNow = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -70,55 +139,30 @@ export default function InteractivePreview() {
         ctx.fillStyle = raw.includes(' ') ? `rgb(${raw})` : raw;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+      baseSnapshotRef.current = null;
       return;
     }
-    const { maxW, maxH } = getMaxDims();
+    recalcMaxDims();
+    const { maxW, maxH } = maxDimsRef.current;
     try {
       drawPreview(canvas, img, img.naturalWidth, img.naturalHeight, logoSource, logo2Source, settings, maxW, maxH);
     } catch {
       // önizleme hatası kritik değil
     }
 
-    // Hover crosshair + sürükleme ghost overlay
-    const overlayXY = ghostXY || hoverXY;
-    if (pinTarget && overlayXY) {
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      const cssW = parseFloat(canvas.style.width) || canvas.width;
-      const cssH = parseFloat(canvas.style.height) || canvas.height;
-      const dpr = window.devicePixelRatio || 1;
-      const cx = overlayXY.x * cssW;
-      const cy = overlayXY.y * cssH;
-      const color = pinTarget === 'logo1' ? 'rgba(255,77,77,0.85)' : 'rgba(80,180,255,0.85)';
-      const colorFill = pinTarget === 'logo1' ? 'rgba(255,77,77,0.25)' : 'rgba(80,180,255,0.25)';
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1 / dpr;
-
-      if (isDraggingRef.current && ghostXY) {
-        // Sürükleme: crosshair yerine ghost logo kutusu göster
-        const logo = pinTarget === 'logo1' ? logoSource : logo2Source;
-        const ghostW = logo ? Math.round(cssW * 0.15) : 40;
-        const ghostH = logo ? Math.round(ghostW * (logo.height / Math.max(1, logo.width))) : 24;
-        ctx.setLineDash([3, 2]);
-        ctx.strokeRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
-        ctx.fillStyle = colorFill;
-        ctx.fillRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
-        ctx.setLineDash([]);
-        ctx.fillStyle = color;
-        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
-      } else {
-        // Normal crosshair
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, cssH); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cssW, cy); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = color;
-        ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+    // Taban çizimi snapshot'la — overlay her hover'da bu snapshot'tan geri
+    // yüklenir, watermark yeniden hesaplanmaz.
+    const ctx = canvas.getContext('2d');
+    if (ctx && canvas.width > 0 && canvas.height > 0) {
+      try {
+        baseSnapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } catch {
+        baseSnapshotRef.current = null;
       }
-      ctx.restore();
     }
-  }, [previewImageUrl, logoSource, logo2Source, settings, pinTarget, hoverXY, ghostXY]);
+
+    drawOverlay();
+  }, [previewImageUrl, logoSource, logo2Source, settings, recalcMaxDims, drawOverlay]);
 
   // Debounce wrapper — slider gibi hızlı ayar değişimlerinde gereksiz yeniden çizimi önler
   const paint = useCallback(() => {
@@ -138,22 +182,38 @@ export default function InteractivePreview() {
     img.onload = () => { if (!cancelled) { imgRef.current = img; paintNow(); } };
     img.onerror = () => { if (!cancelled) { imgRef.current = null; paintNow(); } };
     img.src = previewImageUrl;
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Decode edilmekte olan büyük görsel verisini serbest bırak.
+      img.onload = null;
+      img.onerror = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewImageUrl]);
 
-  // Ayar/logo/hover değişince debounced yeniden çiz
+  // Ayar/logo değişince debounced yeniden çiz (ağır: watermark taban render'ı)
   useEffect(() => { paint(); }, [paint]);
 
-  // Resize observer — anında çiz (layout değişimi)
+  // Hover/ghost/pinTarget değişince SADECE overlay'i yeniden çiz — watermark
+  // tabanı yeniden hesaplanmaz (bkz. drawOverlay yorumu). Fare hareketi gibi
+  // yüksek frekanslı olaylarda bu ayrım kritik performans farkı yaratır.
+  useEffect(() => { drawOverlay(); }, [drawOverlay]);
+
+  // Resize observer — container boyutu değiştiğinde cache'i güncelle + anında çiz
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
     let frame = 0;
-    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(paintNow); });
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        recalcMaxDims();
+        paintNow();
+      });
+    });
     ro.observe(container);
     return () => { cancelAnimationFrame(frame); ro.disconnect(); };
-  }, [paintNow]);
+  }, [paintNow, recalcMaxDims]);
 
   // Canvas'a tıklama/fare koordinatı → 0-1 oranı (CSS px → canvas px → oran)
   // DPR-aware: canvas.width/height fiziksel piksel, rect.width/height CSS piksel
@@ -213,15 +273,23 @@ export default function InteractivePreview() {
     setGhostXY(null);
   };
 
+  // mousemove native olarak saniyede 60-100+ kez tetiklenebilir — rAF ile
+  // throttle edilerek React state güncellemeleri (ve dolayısıyla re-render'lar)
+  // tarayıcının çizim döngüsüyle sınırlanır (aşırı re-render önlenir).
+  const moveFrameRef = useRef(0);
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
     const xy = relativeXY(e);
     if (!xy) return;
-    if (isDraggingRef.current) {
-      setGhostXY(xy);
-    } else {
-      setHoverXY(xy);
-    }
+    if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
+    moveFrameRef.current = requestAnimationFrame(() => {
+      moveFrameRef.current = 0;
+      if (isDraggingRef.current) {
+        setGhostXY(xy);
+      } else {
+        setHoverXY(xy);
+      }
+    });
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -427,3 +495,5 @@ export default function InteractivePreview() {
     </section>
   );
 }
+
+export default memo(InteractivePreview);

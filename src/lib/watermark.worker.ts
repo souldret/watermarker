@@ -83,85 +83,98 @@ async function processJob(req: WatermarkWorkerRequest): Promise<ArrayBuffer> {
 
   // Görsel decode
   const imageBlob = new Blob([req.imageBuffer]);
-  const imageBitmap = await createImageBitmap(imageBlob);
-  const { width, height } = imageBitmap;
+  let imageBitmap: ImageBitmap | null = await createImageBitmap(imageBlob);
+  let logo1Bitmap: ImageBitmap | null = null;
+  let logo2Bitmap: ImageBitmap | null = null;
 
-  if (width < 1 || height < 1) throw new Error('Görsel boyutu geçersiz');
+  try {
+    const { width, height } = imageBitmap;
 
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
-  if (!ctx) throw new Error('OffscreenCanvas 2d context alınamadı');
+    if (width < 1 || height < 1) throw new Error('Görsel boyutu geçersiz');
 
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(imageBitmap, 0, 0);
-  imageBitmap.close();
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+    if (!ctx) throw new Error('OffscreenCanvas 2d context alınamadı');
 
-  // Logo 1
-  if (req.logo1Buffer) {
-    const logo1Blob = new Blob([req.logo1Buffer]);
-    const logo1Bitmap = await createImageBitmap(logo1Blob);
-    const logo1: LogoSource = { width: req.logo1Width, height: req.logo1Height, bitmap: logo1Bitmap };
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(imageBitmap, 0, 0);
+    imageBitmap.close();
+    imageBitmap = null;
 
-    // smartPosition worker'da desteklenmez (DOM gerektiriyor) — ilk pozisyonu kullan
-    const positions =
-      req.settings.positions && req.settings.positions.length > 0
-        ? [...req.settings.positions]
-        : ['br' as const];
-    const toDraw = req.settings.smartPosition ? [positions[0]] : positions;
+    // Logo 1
+    if (req.logo1Buffer) {
+      const logo1Blob = new Blob([req.logo1Buffer]);
+      logo1Bitmap = await createImageBitmap(logo1Blob);
+      const logo1: LogoSource = { width: req.logo1Width, height: req.logo1Height, bitmap: logo1Bitmap };
 
-    for (const pos of toDraw) {
-      const rects = calcLogoRects(
-        width, height,
-        logo1.width, logo1.height,
-        pos, req.settings,
-        req.settings.logo1CustomXY,
-      );
-      for (const rect of rects) {
-        drawLogoAtOffscreen(ctx, logo1Bitmap, rect, req.settings.opacity, req.settings.rotation);
+      // smartPosition worker'da desteklenmez (DOM gerektiriyor) — ilk pozisyonu kullan
+      const positions =
+        req.settings.positions && req.settings.positions.length > 0
+          ? [...req.settings.positions]
+          : ['br' as const];
+      const toDraw = req.settings.smartPosition ? [positions[0]] : positions;
+
+      for (const pos of toDraw) {
+        const rects = calcLogoRects(
+          width, height,
+          logo1.width, logo1.height,
+          pos, req.settings,
+          req.settings.logo1CustomXY,
+        );
+        for (const rect of rects) {
+          drawLogoAtOffscreen(ctx, logo1Bitmap, rect, req.settings.opacity, req.settings.rotation);
+        }
       }
+      logo1Bitmap.close();
+      logo1Bitmap = null;
     }
-    logo1Bitmap.close();
-  }
 
-  // Logo 2
-  if (req.logo2Buffer && req.settings.logo2?.enabled) {
-    const logo2Blob = new Blob([req.logo2Buffer]);
-    const logo2Bitmap = await createImageBitmap(logo2Blob);
-    const l2 = req.settings.logo2;
-    const positions = l2.positions.length > 0 ? l2.positions : ['bl' as const];
+    // Logo 2
+    if (req.logo2Buffer && req.settings.logo2?.enabled) {
+      const logo2Blob = new Blob([req.logo2Buffer]);
+      logo2Bitmap = await createImageBitmap(logo2Blob);
+      const l2 = req.settings.logo2;
+      const positions = l2.positions.length > 0 ? l2.positions : ['bl' as const];
 
-    for (const pos of positions) {
-      const rect = calcLogo2Rect(
+      for (const pos of positions) {
+        const rect = calcLogo2Rect(
+          width, height,
+          req.logo2Width, req.logo2Height,
+          pos, l2,
+          req.settings.marginPx,
+          req.settings.customXYMode ?? 'edge-anchor',
+        );
+        drawLogoAtOffscreen(ctx, logo2Bitmap, rect, l2.opacity, l2.rotation);
+      }
+      logo2Bitmap.close();
+      logo2Bitmap = null;
+    }
+
+    // Metin watermark — OffscreenCanvas'ta drawTextWatermark çalışır (ctx2d uyumlu)
+    if (req.settings.textWatermark?.enabled) {
+      // drawTextWatermark CanvasRenderingContext2D bekliyor; OffscreenCanvasRenderingContext2D uyumlu
+      drawTextWatermark(
+        ctx as unknown as CanvasRenderingContext2D,
         width, height,
-        req.logo2Width, req.logo2Height,
-        pos, l2,
-        req.settings.marginPx,
-        req.settings.customXYMode ?? 'edge-anchor',
+        req.settings.textWatermark,
+        1,
       );
-      drawLogoAtOffscreen(ctx, logo2Bitmap, rect, l2.opacity, l2.rotation);
     }
-    logo2Bitmap.close();
+
+    // Encode
+    const blob = await canvas.convertToBlob({
+      type: req.mime,
+      quality: req.quality,
+    });
+
+    return await blob.arrayBuffer();
+  } finally {
+    // Hata durumunda dahi bitmap'ler garantili kapatılır — GPU/bellek sızıntısını önler
+    imageBitmap?.close();
+    logo1Bitmap?.close();
+    logo2Bitmap?.close();
   }
-
-  // Metin watermark — OffscreenCanvas'ta drawTextWatermark çalışır (ctx2d uyumlu)
-  if (req.settings.textWatermark?.enabled) {
-    // drawTextWatermark CanvasRenderingContext2D bekliyor; OffscreenCanvasRenderingContext2D uyumlu
-    drawTextWatermark(
-      ctx as unknown as CanvasRenderingContext2D,
-      width, height,
-      req.settings.textWatermark,
-      1,
-    );
-  }
-
-  // Encode
-  const blob = await canvas.convertToBlob({
-    type: req.mime,
-    quality: req.quality,
-  });
-
-  return blob.arrayBuffer();
 }
 
 // Worker mesaj işleyici

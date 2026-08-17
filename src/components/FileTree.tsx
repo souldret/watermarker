@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Folder, FileImage } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { applyFilterToChapters } from '@/lib/pageFilter';
 import { useI18n } from '@/hooks/useI18n';
 
-export default function FileTree() {
+function FileTree() {
   const { t } = useI18n();
   const chapters = useAppStore((s) => s.chapters);
   const pageFilter = useAppStore((s) => s.pageFilter);
@@ -74,3 +75,5 @@ export default function FileTree() {
     </section>
   );
 }
+
+export default memo(FileTree);

@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import type JSZip from 'jszip';
 import type {
   ChapterJob,
   FlatJob,
@@ -34,6 +34,7 @@ function downloadBlob(blob: Blob, fileName: string): void {
 function sanitizeZipName(name: string): string {
   return (
     name
+      // eslint-disable-next-line no-control-regex -- dosya adindan kontrol karakterlerini temizler
       .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
       .replace(/[^\w\u00C0-\u024F\u0400-\u04FF\- .]+/g, '')
       .trim()
@@ -165,9 +166,22 @@ class WorkerPool {
   }
 }
 
+/**
+ * logoToBuffer sonucu, aynı LogoSource (bitmap referansı) için cache'lenir.
+ * Kullanıcı "Devam Et"/resume akışında veya arka arkaya birden fazla batch
+ * çalıştırdığında, logo değişmediği sürece PNG encode round-trip'i tekrar
+ * yapılmaz (performans: her pipeline çalıştırmasında OffscreenCanvas +
+ * convertToBlob maliyeti elenir).
+ */
+const logoBufferCache = new WeakMap<ImageBitmap | HTMLImageElement, ArrayBuffer>();
+
 /** Logo buffer'ını ArrayBuffer olarak al (worker'a aktarım için) */
 async function logoToBuffer(logo: LogoSource | null): Promise<ArrayBuffer | null> {
   if (!logo) return null;
+
+  const cached = logoBufferCache.get(logo.bitmap);
+  if (cached) return cached;
+
   // LogoSource içindeki bitmap'i tekrar blob'a çeviremeyiz doğrudan,
   // Bu yüzden logoyu File/Blob olarak store'dan almak ideal, ancak mevcut
   // mimari sadece LogoSource saklıyor. Worker'a aktarmak için küçük bir
@@ -179,7 +193,9 @@ async function logoToBuffer(logo: LogoSource | null): Promise<ArrayBuffer | null
       if (octx) {
         octx.drawImage(logo.bitmap as CanvasImageSource, 0, 0);
         const blob = await oc.convertToBlob({ type: 'image/png' });
-        return blob.arrayBuffer();
+        const buf = await blob.arrayBuffer();
+        logoBufferCache.set(logo.bitmap, buf);
+        return buf;
       }
     }
     // Fallback: HTMLCanvasElement
@@ -190,9 +206,11 @@ async function logoToBuffer(logo: LogoSource | null): Promise<ArrayBuffer | null
       const ctx2 = c.getContext('2d');
       if (ctx2) {
         ctx2.drawImage(logo.bitmap as CanvasImageSource, 0, 0);
-        return new Promise<ArrayBuffer>((res, rej) =>
+        const buf = await new Promise<ArrayBuffer>((res, rej) =>
           c.toBlob((b) => (b ? b.arrayBuffer().then(res) : rej(new Error('toBlob failed'))), 'image/png'),
         );
+        logoBufferCache.set(logo.bitmap, buf);
+        return buf;
       }
     }
     return null;
@@ -280,7 +298,9 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
   }
 
   const useZip = !outDir;
-  const zip = useZip ? new JSZip() : null;
+  // JSZip yalnızca ZIP çıktısı gerektiğinde dinamik olarak yüklenir —
+  // ana bundle'a her zaman dahil edilmesini önler (code-splitting).
+  const zip: JSZip | null = useZip ? new (await import('jszip')).default() : null;
   let startIndex = opts.resumeFrom?.nextGlobalIndex ?? 0;
   if (startIndex < 0 || !Number.isFinite(startIndex)) startIndex = 0;
   if (startIndex > totalImages) startIndex = totalImages;
@@ -328,260 +348,268 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
     pool = null;
   }
 
-  // ─── Checkpoint: tamamlananları takip et ─────────────────────────────────────
-  // Paralel işlemede tamamlanma sırası garanti değil → Set ile takip et
-  const completedSet = new Set<number>();
-  // Resume durumunda önceki tamamlananları set'e ekle
-  for (let i = 0; i < startIndex; i++) completedSet.add(i);
-
-  let cancelled = false;
-
-  const saveCp = () => {
-    // En küçük tamamlanmamış index'i bul (= devam noktası)
-    let next = startIndex;
-    while (completedSet.has(next)) next++;
-    opts.onCheckpoint({
-      sourceLabel: opts.sourceLabel,
-      mode: opts.mode || opts.resumeFrom?.mode || 'batch',
-      nextGlobalIndex: next,
-      success: result.success,
-      failed: result.failed,
-      skipped: result.skipped,
-      errors: result.errors,
-      startedAt,
-      bytesIn: result.bytesIn,
-      bytesOut: result.bytesOut,
-    });
-  };
-
-  // ─── Tek bir iş birimini işle ─────────────────────────────────────────────────
-  async function processOne(job: FlatJob, i: number): Promise<{ blob: Blob; ext: string } | null> {
-    // GIF politikası
-    if (isGif(job.image.name)) {
-      if (opts.settings.gifPolicy === 'skip') {
-        result.skipped += 1;
-        opts.onLog('warn', `GIF atlandı: ${job.image.path}`);
-        return null;
-      }
-      if (opts.settings.gifPolicy === 'warn') {
-        opts.onLog('warn', `GIF: yalnızca ilk kare işlenir → ${job.image.name}`);
-      }
-    }
-
-    // Animasyonlu WebP politikası (GIF policy ile aynı)
-    const animated = await isAnimatedWebp(job.image.file);
-    if (animated) {
-      if (opts.settings.gifPolicy === 'skip') {
-        result.skipped += 1;
-        opts.onLog('warn', `Animasyonlu WebP atlandı: ${job.image.path}`);
-        return null;
-      }
-      opts.onLog('warn', `Animasyonlu WebP: yalnızca ilk kare işlenir → ${job.image.name}`);
-    }
-
-    // Büyük dosya uyarısı
-    if (job.image.file.size >= largeBytes) {
-      opts.onLog(
-        'warn',
-        `Büyük dosya (${(job.image.file.size / 1024 / 1024).toFixed(1)} MB): ${job.image.name}`,
-      );
-    }
-
-    result.bytesIn += job.image.file.size;
-
-    const { mime, ext } = mimeFor(opts.settings.outputFormat, job.image.name);
-    const quality = mime === 'image/png' ? undefined : Math.min(1, Math.max(0.1, opts.settings.outputQuality));
-
-    if (useWorker && pool && logo1Buffer !== null) {
-      // Worker yolu
-      const imageBuffer = await job.image.file.arrayBuffer();
-      // Logo buffer'larını kopyala (transfer sonrası orijinal geçersiz kalır)
-      const l1 = logo1Buffer ? logo1Buffer.slice(0) : null;
-      const l2 = logo2Buffer ? logo2Buffer.slice(0) : null;
-
-      const req: WatermarkWorkerRequest = {
-        jobId: `${i}-${Date.now()}`,
-        imageBuffer,
-        logo1Buffer: l1,
-        logo1Width: opts.logo?.width ?? 0,
-        logo1Height: opts.logo?.height ?? 0,
-        logo2Buffer: opts.settings.logo2?.enabled ? l2 : null,
-        logo2Width: opts.logo2?.width ?? 0,
-        logo2Height: opts.logo2?.height ?? 0,
-        settings: opts.settings,
-        mime,
-        quality,
-      };
-
-      const resp = await pool.run(req);
-      if (resp.error || !resp.buffer) throw new Error(resp.error || 'Worker boş yanıt');
-      const blob = new Blob([resp.buffer], { type: mime });
-      return { blob, ext };
-    } else {
-      // Fallback: ana thread
-      const { blob, ext: blobExt } = await applyWatermark(
-        job.image.file, opts.logo, opts.logo2, opts.settings,
-      );
-      return { blob, ext: blobExt };
-    }
+  // Worker pool kurulduktan sonraki tüm işlem try/finally ile sarılıyor —
+  // beklenmeyen bir exception (ZIP encode, dosya yazma vb.) fırlarsa dahi
+  // worker'ların garantili sonlandırılmasını sağlar (bellek/thread sızıntısı önlenir).
+  try {
+    return await runPipelineBody();
+  } finally {
+    pool?.terminate();
   }
 
-  // ─── Eşzamanlı işlem (worker pool destekli) ──────────────────────────────────
-  // Düzgün p-limit implementasyonu: Semaphore tabanlı
-  const CONCURRENCY = useWorker ? workerCount : 1;
-  const pendingJobs = jobs.slice(startIndex);
+  async function runPipelineBody(): Promise<ProcessResult> {
+    // ─── Checkpoint: tamamlananları takip et ───────────────────────────────────
+    // Paralel işlemede tamamlanma sırası garanti değil → Set ile takip et
+    const completedSet = new Set<number>();
+    // Resume durumunda önceki tamamlananları set'e ekle
+    for (let i = 0; i < startIndex; i++) completedSet.add(i);
 
-  const results: Map<number, { blob: Blob; ext: string } | null> = new Map();
-  const errors: Map<number, Error> = new Map();
+    let cancelled = false;
 
-  async function runJob(job: FlatJob, i: number): Promise<void> {
-    opts.onProgress({
-      current: i + 1,
-      total: totalImages,
-      chapterName: job.chapterName,
-      fileName: job.image.name,
-      percent: Math.round(((i + 1) / totalImages) * 100),
-      phase: 'process',
-    });
-
-    try {
-      const res = await processOne(job, i);
-      results.set(i, res);
-    } catch (err) {
-      errors.set(i, err instanceof Error ? err : new Error('Bilinmeyen hata'));
-    }
-    // İş tamamlandığında hemen completedSet'e ekle (checkpoint için)
-    completedSet.add(i);
-  }
-
-  // Semaphore tabanlı concurrency limiti
-  // Slot açıldığında resolve eden promise zinciri kurar — race condition yok
-  await (async () => {
-    // Aktif slot'ları tutan promise listesi (tamamlanınca remove ediliyor)
-    const active: Set<Promise<void>> = new Set();
-    let globalI = startIndex;
-
-    for (const job of pendingJobs) {
-      if (opts.shouldCancel()) {
-        cancelled = true;
-        break;
-      }
-
-      // Kapasite doluysa bir slot açılmasını bekle
-      if (active.size >= CONCURRENCY) {
-        await Promise.race(active);
-      }
-
-      const i = globalI++;
-      const p: Promise<void> = runJob(job, i).then(() => {
-        active.delete(p);
-        return yieldToUI();
+    const saveCp = () => {
+      // En küçük tamamlanmamış index'i bul (= devam noktası)
+      let next = startIndex;
+      while (completedSet.has(next)) next++;
+      opts.onCheckpoint({
+        sourceLabel: opts.sourceLabel,
+        mode: opts.mode || opts.resumeFrom?.mode || 'batch',
+        nextGlobalIndex: next,
+        success: result.success,
+        failed: result.failed,
+        skipped: result.skipped,
+        errors: result.errors,
+        startedAt,
+        bytesIn: result.bytesIn,
+        bytesOut: result.bytesOut,
       });
-      active.add(p);
+    };
+
+    // ─── Tek bir iş birimini işle ───────────────────────────────────────────────
+    async function processOne(job: FlatJob, i: number): Promise<{ blob: Blob; ext: string } | null> {
+      // GIF politikası
+      if (isGif(job.image.name)) {
+        if (opts.settings.gifPolicy === 'skip') {
+          result.skipped += 1;
+          opts.onLog('warn', `GIF atlandı: ${job.image.path}`);
+          return null;
+        }
+        if (opts.settings.gifPolicy === 'warn') {
+          opts.onLog('warn', `GIF: yalnızca ilk kare işlenir → ${job.image.name}`);
+        }
+      }
+
+      // Animasyonlu WebP politikası (GIF policy ile aynı)
+      const animated = await isAnimatedWebp(job.image.file);
+      if (animated) {
+        if (opts.settings.gifPolicy === 'skip') {
+          result.skipped += 1;
+          opts.onLog('warn', `Animasyonlu WebP atlandı: ${job.image.path}`);
+          return null;
+        }
+        opts.onLog('warn', `Animasyonlu WebP: yalnızca ilk kare işlenir → ${job.image.name}`);
+      }
+
+      // Büyük dosya uyarısı
+      if (job.image.file.size >= largeBytes) {
+        opts.onLog(
+          'warn',
+          `Büyük dosya (${(job.image.file.size / 1024 / 1024).toFixed(1)} MB): ${job.image.name}`,
+        );
+      }
+
+      result.bytesIn += job.image.file.size;
+
+      const { mime, ext } = mimeFor(opts.settings.outputFormat, job.image.name);
+      const quality = mime === 'image/png' ? undefined : Math.min(1, Math.max(0.1, opts.settings.outputQuality));
+
+      if (useWorker && pool && logo1Buffer !== null) {
+        // Worker yolu
+        const imageBuffer = await job.image.file.arrayBuffer();
+        // Logo buffer'larını kopyala (transfer sonrası orijinal geçersiz kalır)
+        const l1 = logo1Buffer ? logo1Buffer.slice(0) : null;
+        const l2 = logo2Buffer ? logo2Buffer.slice(0) : null;
+
+        const req: WatermarkWorkerRequest = {
+          jobId: `${i}-${Date.now()}`,
+          imageBuffer,
+          logo1Buffer: l1,
+          logo1Width: opts.logo?.width ?? 0,
+          logo1Height: opts.logo?.height ?? 0,
+          logo2Buffer: opts.settings.logo2?.enabled ? l2 : null,
+          logo2Width: opts.logo2?.width ?? 0,
+          logo2Height: opts.logo2?.height ?? 0,
+          settings: opts.settings,
+          mime,
+          quality,
+        };
+
+        const resp = await pool.run(req);
+        if (resp.error || !resp.buffer) throw new Error(resp.error || 'Worker boş yanıt');
+        const blob = new Blob([resp.buffer], { type: mime });
+        return { blob, ext };
+      } else {
+        // Fallback: ana thread
+        const { blob, ext: blobExt } = await applyWatermark(
+          job.image.file, opts.logo, opts.logo2, opts.settings,
+        );
+        return { blob, ext: blobExt };
+      }
     }
 
-    // Bekleyen tüm işleri tamamla
-    await Promise.allSettled(active);
-  })();
+    // ─── Eşzamanlı işlem (worker pool destekli) ────────────────────────────────
+    // Düzgün p-limit implementasyonu: Semaphore tabanlı
+    const CONCURRENCY = useWorker ? workerCount : 1;
+    const pendingJobs = jobs.slice(startIndex);
 
-  // ─── Sonuçları ZIP/klasöre yaz ───────────────────────────────────────────────
-  for (let i = startIndex; i < jobs.length; i++) {
-    const job = jobs[i];
-    // completedSet.add(i) — runJob'da ekleniyor (paralel işleme uyumluluğu için)
+    const results: Map<number, { blob: Blob; ext: string } | null> = new Map();
+    const errors: Map<number, Error> = new Map();
 
-    if (errors.has(i)) {
-      result.failed += 1;
-      const message = errors.get(i)!.message;
-      result.errors.push({ path: job.image.path, message });
-      opts.onLog('error', `${job.image.path}: ${message}`);
-      continue;
-    }
-
-    const res = results.get(i);
-    if (!res) {
-      // skip (GIF/animasyonlu WebP) — zaten sayıldı
-      continue;
-    }
-
-    const { blob, ext } = res;
-    result.bytesOut += blob.size;
-
-    const fileName = buildOutputFileName({
-      originalName: job.image.name,
-      chapterName: job.chapterName,
-      indexInChapter: job.imageIndexInChapter,
-      pattern: opts.settings.namingPattern,
-      customTemplate: opts.settings.namingCustom,
-      outputFormat: opts.settings.outputFormat,
-    });
-
-    if (outDir) {
+    async function runJob(job: FlatJob, i: number): Promise<void> {
       opts.onProgress({
         current: i + 1,
         total: totalImages,
         chapterName: job.chapterName,
-        fileName,
+        fileName: job.image.name,
         percent: Math.round(((i + 1) / totalImages) * 100),
-        phase: 'write',
+        phase: 'process',
       });
-      await writeBlobToTree(outDir, job.chapterName, fileName, blob);
-    } else if (zip) {
-      const folder = zip.folder(job.chapterName) || zip;
-      folder.file(fileName, blob);
+
+      try {
+        const res = await processOne(job, i);
+        results.set(i, res);
+      } catch (err) {
+        errors.set(i, err instanceof Error ? err : new Error('Bilinmeyen hata'));
+      }
+      // İş tamamlandığında hemen completedSet'e ekle (checkpoint için)
+      completedSet.add(i);
     }
-    result.success += 1;
 
-    // Checkpoint: her 10 görselde bir
-    if ((i + 1) % 10 === 0) saveCp();
+    // Semaphore tabanlı concurrency limiti
+    // Slot açıldığında resolve eden promise zinciri kurar — race condition yok
+    await (async () => {
+      // Aktif slot'ları tutan promise listesi (tamamlanınca remove ediliyor)
+      const active: Set<Promise<void>> = new Set();
+      let globalI = startIndex;
 
-    const yieldEvery = yieldIntervalFor(job.image.file.size);
-    if (i % yieldEvery === 0) await yieldToUI();
-  }
+      for (const job of pendingJobs) {
+        if (opts.shouldCancel()) {
+          cancelled = true;
+          break;
+        }
 
-  // Worker pool'u kapat
-  pool?.terminate();
+        // Kapasite doluysa bir slot açılmasını bekle
+        if (active.size >= CONCURRENCY) {
+          await Promise.race(active);
+        }
 
-  if (!cancelled && useZip && zip && result.success > 0) {
-    opts.onLog('info', 'ZIP paketleniyor...');
-    const content = await zip.generateAsync(
-      { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
-      (meta) => {
-        opts.onProgress({
-          current: totalImages,
-          total: totalImages,
-          chapterName: 'ZIP',
-          fileName: 'paketleniyor',
-          percent: Math.max(1, Math.round(meta.percent)),
-          phase: 'zip',
+        const i = globalI++;
+        const p: Promise<void> = runJob(job, i).then(() => {
+          active.delete(p);
+          return yieldToUI();
         });
-      },
-    );
-    downloadBlob(content, `${sanitizeZipName(opts.sourceLabel)}-watermarked.zip`);
-    opts.onLog(
-      'success',
-      `ZIP indirildi: ${result.success} başarılı, ${result.failed} hata, ${result.skipped} atlandı`,
-    );
-  } else if (!cancelled && outDir && result.success > 0) {
-    opts.onLog(
-      'success',
-      `Klasöre yazıldı: ${result.success} başarılı, ${result.failed} hata, ${result.skipped} atlandı`,
-    );
-  } else if (cancelled && useZip && zip && result.success > 0) {
-    opts.onLog('info', 'Kısmi ZIP paketleniyor...');
-    const content = await zip.generateAsync({
-      type: 'blob',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 },
-    });
-    downloadBlob(content, `${sanitizeZipName(opts.sourceLabel)}-partial-watermarked.zip`);
-    opts.onLog('success', `Kısmi ZIP indirildi (${result.success} dosya).`);
-  } else if (!cancelled && result.success === 0) {
-    opts.onLog('error', 'Hiçbir görsel işlenemedi.');
-  }
+        active.add(p);
+      }
 
-  if (!cancelled) opts.onCheckpoint(null);
-  result.elapsedMs = Date.now() - startedAt;
-  return result;
+      // Bekleyen tüm işleri tamamla
+      await Promise.allSettled(active);
+    })();
+
+    // ─── Sonuçları ZIP/klasöre yaz ─────────────────────────────────────────────
+    for (let i = startIndex; i < jobs.length; i++) {
+      const job = jobs[i];
+      // completedSet.add(i) — runJob'da ekleniyor (paralel işleme uyumluluğu için)
+
+      if (errors.has(i)) {
+        result.failed += 1;
+        const message = errors.get(i)!.message;
+        result.errors.push({ path: job.image.path, message });
+        opts.onLog('error', `${job.image.path}: ${message}`);
+        continue;
+      }
+
+      const res = results.get(i);
+      if (!res) {
+        // skip (GIF/animasyonlu WebP) — zaten sayıldı
+        continue;
+      }
+
+      const { blob } = res;
+      result.bytesOut += blob.size;
+
+      const fileName = buildOutputFileName({
+        originalName: job.image.name,
+        chapterName: job.chapterName,
+        indexInChapter: job.imageIndexInChapter,
+        pattern: opts.settings.namingPattern,
+        customTemplate: opts.settings.namingCustom,
+        outputFormat: opts.settings.outputFormat,
+      });
+
+      if (outDir) {
+        opts.onProgress({
+          current: i + 1,
+          total: totalImages,
+          chapterName: job.chapterName,
+          fileName,
+          percent: Math.round(((i + 1) / totalImages) * 100),
+          phase: 'write',
+        });
+        await writeBlobToTree(outDir, job.chapterName, fileName, blob);
+      } else if (zip) {
+        const folder = zip.folder(job.chapterName) || zip;
+        folder.file(fileName, blob);
+      }
+      result.success += 1;
+
+      // Checkpoint: her 10 görselde bir
+      if ((i + 1) % 10 === 0) saveCp();
+
+      const yieldEvery = yieldIntervalFor(job.image.file.size);
+      if (i % yieldEvery === 0) await yieldToUI();
+    }
+
+    if (!cancelled && useZip && zip && result.success > 0) {
+      opts.onLog('info', 'ZIP paketleniyor...');
+      const content = await zip.generateAsync(
+        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+        (meta) => {
+          opts.onProgress({
+            current: totalImages,
+            total: totalImages,
+            chapterName: 'ZIP',
+            fileName: 'paketleniyor',
+            percent: Math.max(1, Math.round(meta.percent)),
+            phase: 'zip',
+          });
+        },
+      );
+      downloadBlob(content, `${sanitizeZipName(opts.sourceLabel)}-watermarked.zip`);
+      opts.onLog(
+        'success',
+        `ZIP indirildi: ${result.success} başarılı, ${result.failed} hata, ${result.skipped} atlandı`,
+      );
+    } else if (!cancelled && outDir && result.success > 0) {
+      opts.onLog(
+        'success',
+        `Klasöre yazıldı: ${result.success} başarılı, ${result.failed} hata, ${result.skipped} atlandı`,
+      );
+    } else if (cancelled && useZip && zip && result.success > 0) {
+      opts.onLog('info', 'Kısmi ZIP paketleniyor...');
+      const content = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      });
+      downloadBlob(content, `${sanitizeZipName(opts.sourceLabel)}-partial-watermarked.zip`);
+      opts.onLog('success', `Kısmi ZIP indirildi (${result.success} dosya).`);
+    } else if (!cancelled && result.success === 0) {
+      opts.onLog('error', 'Hiçbir görsel işlenemedi.');
+    }
+
+    if (!cancelled) opts.onCheckpoint(null);
+    result.elapsedMs = Date.now() - startedAt;
+    return result;
+  }
 }
 
 export type { FlatJob };

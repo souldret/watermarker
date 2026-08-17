@@ -6,7 +6,7 @@
  * Adım 6: Bozuk JSON → crash yok, hata loglanmalı (throws değil)
  * Adım 7: Round-trip testi (kaydet → yükle → bit-bit aynı)
  */
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   migratePreset,
   loadPresets,

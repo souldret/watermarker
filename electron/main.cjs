@@ -10,7 +10,6 @@ let tray = null;
 let sharpLib = null;
 function tryLoadSharp() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     sharpLib = require('sharp');
     console.log('[sharp] Native modül yüklendi.');
   } catch {

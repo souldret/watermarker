@@ -13,7 +13,7 @@
  * Adım 19: onProgress monoton artıyor (geri gitmiyor)
  * Adım 21: CONCURRENCY=1 ile doğru çalışma
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 // ─── Semaphore implementasyonunu doğrudan test et ────────────────────────────
 
@@ -62,7 +62,7 @@ async function runWithConcurrency<T>(
 describe('ADIM 15 — Sirali dosya ve chapter eslesmesi', () => {
   it('100 is ile concurrency=4: tum indisler islenir, hic atlanmaz', async () => {
     const items = Array.from({ length: 100 }, (_, i) => i);
-    const { processed } = await runWithConcurrency(items, 4, async (_, i) => {
+    const { processed } = await runWithConcurrency(items, 4, async () => {
       // Simule etmek icin kisa bekleme
       await Promise.resolve();
     });

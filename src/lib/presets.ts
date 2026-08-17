@@ -67,7 +67,7 @@ export function migratePreset(raw: Record<string, unknown>): AppPreset {
   let version: number = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 1;
 
   const rawSettings = raw.settings;
-  let settings: Record<string, unknown> =
+  const settings: Record<string, unknown> =
     typeof rawSettings === 'object' && rawSettings !== null
       ? { ...(rawSettings as Record<string, unknown>) }
       : {};

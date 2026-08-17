@@ -1,11 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { Download } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
 import { exportErrorsCsv, exportErrorsJson } from '@/lib/errorReport';
 import { useI18n } from '@/hooks/useI18n';
 
-export default function ProgressPanel() {
+function ProgressPanel() {
   const { t } = useI18n();
   const progress = useAppStore((s) => s.progress);
   const logs = useAppStore((s) => s.logs);
@@ -126,3 +126,5 @@ export default function ProgressPanel() {
     </section>
   );
 }
+
+export default memo(ProgressPanel);

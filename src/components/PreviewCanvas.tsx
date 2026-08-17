@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, memo } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { drawPreview } from '@/lib/watermark';
 import { ImageIcon } from 'lucide-react';
@@ -10,7 +10,7 @@ const PREVIEW_MAX_H = 280;
 /** Slider sürükleme sırasında debounce süresi (ms) */
 const PAINT_DEBOUNCE_MS = 40;
 
-export default function PreviewCanvas() {
+function PreviewCanvas() {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +59,6 @@ export default function PreviewCanvas() {
     } catch {
       // Önizleme hatası UI'yi düşürmesin
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logoSource, logo2Source, settings, previewImageUrl]);
 
   // Debounce wrapper — slider sürükleme gibi hızlı değişimlerde gereksiz yeniden çizimi önler
@@ -94,6 +93,11 @@ export default function PreviewCanvas() {
 
     return () => {
       cancelled = true;
+      // Decode edilmekte olan büyük görsel verisini serbest bırak — hızlı
+      // sayfa değişimlerinde birden fazla Image nesnesinin bellekte asılı
+      // kalmasını önler.
+      img.onload = null;
+      img.onerror = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewImageUrl]);
@@ -142,3 +146,5 @@ export default function PreviewCanvas() {
     </section>
   );
 }
+
+export default memo(PreviewCanvas);

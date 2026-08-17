@@ -23,34 +23,43 @@ export function makeMockCanvasFactory(
 } {
   let callCount = 0;
 
+  // Örnekleme canvas'ının tam boyutu — factory çağrıldığında set edilir.
+  // Piksel-bazlı gerçekçi simülasyon için gerekli (tam-canvas okuması da
+  // bölge-bazlı okuma da AYNI sonucu üretmeli — gerçek bir canvas gibi).
+  let sampleW = 0;
+  let sampleH = 0;
+
   const getImageData = vi.fn((x: number, y: number, w: number, h: number) => {
     callCount++;
     const pixels = new Uint8ClampedArray(w * h * 4);
 
-    // Her çağrıda canvas boyutunu (w, h) baz alarak bölge sınırları hesaplanır.
-    // Bu sayede küçültülmüş canvas boyutlarında da köşe tespiti doğru çalışır.
-    const ctxW = w + x; // drawImage ile doldurulmuş canvas genişliğini tahmin et
-    const ctxH = h + y;
-    const regionW = Math.max(8, Math.floor(ctxW * 0.22));
-    const regionH = Math.max(8, Math.floor(ctxH * 0.14));
+    // Tam canvas boyutuna göre "boş köşe" bölgesinin piksel sınırları.
+    const regionW = Math.max(8, Math.floor(sampleW * 0.22));
+    const regionH = Math.max(8, Math.floor(sampleH * 0.14));
 
-    const isEmptyCorner =
-      emptyCorner === 'tl'
-        ? x < regionW && y < regionH
-        : emptyCorner === 'br'
-        ? x >= ctxW - regionW && y >= ctxH - regionH
-        : false;
+    // Her pikselin MUTLAK (tam canvas'a göre) konumuna bakarak boş köşede mi
+    // karar ver — böylece hem tek büyük çağrı (tam buffer) hem de bölge-bazlı
+    // küçük çağrılar (eski davranış) birbiriyle tutarlı sonuç üretir.
+    for (let ry = 0; ry < h; ry++) {
+      const absY = y + ry;
+      for (let rx = 0; rx < w; rx++) {
+        const absX = x + rx;
+        const isEmptyCorner =
+          emptyCorner === 'tl'
+            ? absX < regionW && absY < regionH
+            : emptyCorner === 'br'
+            ? absX >= sampleW - regionW && absY >= sampleH - regionH
+            : false;
 
-    if (isEmptyCorner) {
-      // Düşük aktivite: sabit gri 64
-      for (let i = 0; i < pixels.length; i += 4) {
-        pixels[i] = 64; pixels[i + 1] = 64; pixels[i + 2] = 64; pixels[i + 3] = 255;
-      }
-    } else {
-      // Yüksek aktivite: değişken parlak piksel
-      for (let i = 0; i < pixels.length; i += 4) {
-        const v = 150 + (i % 100);
-        pixels[i] = v; pixels[i + 1] = 255 - v; pixels[i + 2] = v / 2; pixels[i + 3] = 255;
+        const i = (ry * w + rx) * 4;
+        if (isEmptyCorner) {
+          // Düşük aktivite: sabit gri 64
+          pixels[i] = 64; pixels[i + 1] = 64; pixels[i + 2] = 64; pixels[i + 3] = 255;
+        } else {
+          // Yüksek aktivite: konuma bağlı değişken parlak piksel
+          const v = 150 + ((absX + absY) % 100);
+          pixels[i] = v; pixels[i + 1] = 255 - v; pixels[i + 2] = v / 2; pixels[i + 3] = 255;
+        }
       }
     }
 
@@ -58,6 +67,8 @@ export function makeMockCanvasFactory(
   });
 
   const factory: CanvasFactory = (w: number, h: number) => {
+    sampleW = w;
+    sampleH = h;
     return {
       drawImage: vi.fn(),
       getImageData,

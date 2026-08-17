@@ -9,6 +9,18 @@ export default defineConfig({
   build: {
     sourcemap: false,
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Vendor kütüphanelerini ayrı chunk'lara böl — uygulama kodu
+        // değiştiğinde tarayıcı cache'i vendor chunk'ları için geçerli kalır,
+        // ilk yükleme de büyük tek bir bundle yerine paralel indirilebilir.
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-state': ['zustand'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
   },
   plugins: [
     react({

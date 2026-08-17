@@ -90,12 +90,24 @@ export function pickSmartPosition(
   const sW = sample ? sample.sW : width;
   const sH = sample ? sample.sH : height;
 
+  // Performans: tüm örnekleme canvas'ını TEK bir getImageData çağrısıyla oku,
+  // her aday bölgesini bu tek buffer üzerinden bellek içi indexle tara.
+  // Böylece 9 aday için 9 ayrı GPU→CPU transferi yerine 1 transfer yapılır.
+  let fullData: ImageData | null = null;
+  try {
+    fullData = (sCtx as CanvasRenderingContext2D).getImageData(0, 0, sW, sH);
+  } catch {
+    fullData = null;
+  }
+
   let best: WatermarkPosition = candidates[0] || 'br';
   let bestScore = Number.POSITIVE_INFINITY;
 
   for (const pos of candidates) {
     const region = regionFor(pos, sW, sH);
-    const score = sampleActivity(sCtx as CanvasRenderingContext2D, region.x, region.y, region.w, region.h);
+    const score = fullData
+      ? sampleActivityFromBuffer(fullData, sW, region.x, region.y, region.w, region.h)
+      : sampleActivity(sCtx as CanvasRenderingContext2D, region.x, region.y, region.w, region.h);
     if (score < bestScore) {
       bestScore = score;
       best = pos;
@@ -122,8 +134,17 @@ function regionFor(
   return { x, y, w: rw, h: rh };
 }
 
-function sampleActivity(
-  ctx: CanvasRenderingContext2D,
+/**
+ * Tek seferde okunmuş tam buffer (fullData, genişlik fullW) üzerinden
+ * belirtilen (x, y, w, h) bölgesinin aktivite skorunu hesaplar.
+ * getImageData çağrısı yapmaz — bölge verisi bellek içinde kopyalanıp
+ * orijinal (sampleActivity ile birebir aynı) skorlama algoritması uygulanır.
+ * Bu sayede 9 aday için 9 ayrı GPU→CPU transferi yerine sadece 1 transfer yapılır,
+ * fakat sonuç orijinal algoritmayla bit-bit tutarlı kalır (regresyon yok).
+ */
+function sampleActivityFromBuffer(
+  fullData: ImageData,
+  fullW: number,
   x: number,
   y: number,
   w: number,
@@ -131,21 +152,28 @@ function sampleActivity(
 ): number {
   const sx = Math.max(0, Math.floor(x));
   const sy = Math.max(0, Math.floor(y));
-  const sw = Math.max(1, Math.floor(w));
-  const sh = Math.max(1, Math.floor(h));
-  let data: ImageData;
-  try {
-    data = ctx.getImageData(sx, sy, sw, sh);
-  } catch {
-    return 0;
+  const sw = Math.max(1, Math.min(Math.floor(w), fullW - sx));
+  const sh = Math.max(1, Math.min(Math.floor(h), fullData.height - sy));
+  if (sw < 1 || sh < 1) return 0;
+
+  const src = fullData.data;
+  const region = new Uint8ClampedArray(sw * sh * 4);
+  for (let ry = 0; ry < sh; ry++) {
+    const srcStart = ((sy + ry) * fullW + sx) * 4;
+    const dstStart = ry * sw * 4;
+    region.set(src.subarray(srcStart, srcStart + sw * 4), dstStart);
   }
 
-  const step = Math.max(1, Math.floor((sw * sh) / 400));
+  return scoreFromPixels(region);
+}
+
+/** sampleActivity ile aynı skorlama algoritması — düz piksel dizisi üzerinden. */
+function scoreFromPixels(px: Uint8ClampedArray): number {
+  const step = Math.max(1, Math.floor(px.length / 4 / 400));
   let sum = 0;
   let sumSq = 0;
   let n = 0;
   let edge = 0;
-  const { data: px } = data;
 
   for (let i = 0; i < px.length; i += 4 * step) {
     const r = px[i];
@@ -166,6 +194,26 @@ function sampleActivity(
   if (n === 0) return 0;
   const mean = sum / n;
   const variance = Math.max(0, sumSq / n - mean * mean);
-  // Düşük varyans + düşük kenar = boş alan
   return variance + edge / n;
+}
+
+/** Fallback: örnekleme canvas'ı kurulamadığında orijinal ctx'ten doğrudan okur. */
+function sampleActivity(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): number {
+  const sx = Math.max(0, Math.floor(x));
+  const sy = Math.max(0, Math.floor(y));
+  const sw = Math.max(1, Math.floor(w));
+  const sh = Math.max(1, Math.floor(h));
+  let data: ImageData;
+  try {
+    data = ctx.getImageData(sx, sy, sw, sh);
+  } catch {
+    return 0;
+  }
+  return scoreFromPixels(data.data);
 }

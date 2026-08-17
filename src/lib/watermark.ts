@@ -296,18 +296,40 @@ export function drawTextWatermark(
   ctx.restore();
 }
 
+/**
+ * SmartPosition sonucu, görsel içeriğine bağlıdır — ayarlara (opacity, margin
+ * vb.) bağlı DEĞİLDİR. Önizlemede her slider hareketinde aynı görsel için
+ * tekrar tekrar hesaplanmaması için görsel referansı (imageRef) bazlı
+ * cache'leniyor. Aday listesi (positions) değişirse cache geçersiz sayılır.
+ */
+const smartPositionCache = new WeakMap<
+  CanvasImageSource,
+  { candidatesKey: string; result: WatermarkPosition }
+>();
+
 function resolvePositions(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
   settings: WatermarkSettings,
+  imageRef?: CanvasImageSource,
 ): WatermarkPosition[] {
   const base =
     settings.positions && settings.positions.length > 0
       ? [...settings.positions]
       : (['br'] as WatermarkPosition[]);
   if (!settings.smartPosition) return base;
+
+  const candidatesKey = base.join(',');
+  if (imageRef) {
+    const cached = smartPositionCache.get(imageRef);
+    if (cached && cached.candidatesKey === candidatesKey) {
+      return [cached.result, ...base.filter((p) => p !== cached.result)];
+    }
+  }
+
   const smart = pickSmartPosition(ctx, width, height, base);
+  if (imageRef) smartPositionCache.set(imageRef, { candidatesKey, result: smart });
   return [smart, ...base.filter((p) => p !== smart)];
 }
 
@@ -350,7 +372,11 @@ export async function applyWatermark(
   const canvas = document.createElement('canvas');
   canvas.width = size.width;
   canvas.height = size.height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  // willReadFrequently: getImageData burada çağrılmıyor (smartPosition kendi
+  // örnekleme canvas'ını kullanır) — GPU hızlandırmasını devre dışı bırakmamak
+  // için bu bayrak kasıtlı olarak KULLANILMIYOR (büyük görsellerde encode/draw
+  // performansı için önemli).
+  const ctx = canvas.getContext('2d');
   if (!ctx) {
     if ('close' in image && typeof image.close === 'function') image.close();
     throw new Error('Canvas desteklenmiyor');
@@ -363,7 +389,7 @@ export async function applyWatermark(
 
   // — Logo 1 —
   if (logo) {
-    const positions = resolvePositions(ctx, canvas.width, canvas.height, settings);
+    const positions = resolvePositions(ctx, canvas.width, canvas.height, settings, image);
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
       const rects = calcLogoRects(
@@ -455,7 +481,10 @@ export function drawPreview(
   canvas.style.width = `${cssW}px`;
   canvas.style.height = `${cssH}px`;
 
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  // willReadFrequently kasıtlı olarak KULLANILMIYOR — bu context her slider
+  // hareketinde tekrar tekrar çizim yapar, software-rendering'e zorlamak
+  // önizlemenin akıcılığını düşürür (bkz. yukarıdaki not).
+  const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
   // DPR ölçeklemesi — tüm çizim koordinatları mantıksal piksel cinsinden kalır
@@ -488,7 +517,7 @@ export function drawPreview(
 
   // Logo 1
   if (logo) {
-    const positions = resolvePositions(ctx, cssW, cssH, previewSettings);
+    const positions = resolvePositions(ctx, cssW, cssH, previewSettings, base);
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
       const rects = calcLogoRects(

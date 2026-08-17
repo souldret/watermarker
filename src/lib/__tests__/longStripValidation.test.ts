@@ -133,7 +133,7 @@ describe('ADIM 10 — Uc nokta degerler → crash yok, mantikli clamp', () => {
       longStripMode: { enabled: true, aspectThreshold: 0, repeatEveryPx: 1500 },
     });
     expect(rects.length).toBeGreaterThanOrEqual(1);
-    expect(() => rects).not.toThrow;
+    expect(() => rects).not.toThrow();
   });
 
   it('aspectThreshold cok buyuk (1000000) → hic bir gorsel esigi gecemez, tek rect', () => {
