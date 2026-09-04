@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { loadLogo } from '@/lib/watermark';
+import { isImageFile, isLogoFile } from '@/lib/imageFormats';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -19,7 +20,9 @@ export default function LogoPanel() {
         setLogo(null, null);
         return;
       }
-      if (!file.type.startsWith('image/')) {
+      const looksLikeImage =
+        file.type.startsWith('image/') || isLogoFile(file.name) || isImageFile(file.name);
+      if (!looksLikeImage) {
         addLog('error', 'Logo bir görsel dosyası olmalı.');
         return;
       }
@@ -76,7 +79,7 @@ export default function LogoPanel() {
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.avif,.png,.webp,.svg,.jpg,.jpeg"
           className="hidden"
           onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
         />

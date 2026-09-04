@@ -1,4 +1,5 @@
 import type { NamingPattern, OutputFormat } from './types';
+import { outputMimeFor } from './imageFormats';
 
 function stripExt(name: string): { base: string; ext: string } {
   const i = name.lastIndexOf('.');
@@ -7,13 +8,7 @@ function stripExt(name: string): { base: string; ext: string } {
 }
 
 function extForFormat(format: OutputFormat, originalName: string): string {
-  if (format === 'jpeg') return '.jpg';
-  if (format === 'png') return '.png';
-  if (format === 'webp') return '.webp';
-  const { ext } = stripExt(originalName);
-  const lower = ext.toLowerCase();
-  if (lower === '.bmp' || lower === '.gif') return '.png';
-  return ext || '.jpg';
+  return outputMimeFor(format, originalName).ext;
 }
 
 export function buildOutputFileName(opts: {

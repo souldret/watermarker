@@ -10,6 +10,20 @@
       content="Manga ve manhwa bölüm görsellerine logo basan, tarayıcı tabanlı watermark aracı. Tekli ve çoklu klasör desteği."
     />
     <title>Watermarker — Manga/Manhwa Logo Basıcı</title>
+    <style>
+      html,body,#root{margin:0;min-height:100%;background:#0E0E14;color:#f2f2f5}
+      html[data-theme='light'],html[data-theme='light'] body,html[data-theme='light'] #root{background:#f3f3f6;color:#16161d}
+    </style>
+    <script>
+      try {
+        var p = JSON.parse(localStorage.getItem('watermarker.ui.v1') || '{}');
+        var theme = p.theme === 'light' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-compact', p.compact ? '1' : '0');
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', theme === 'light' ? '#f3f3f6' : '#0E0E14');
+      } catch (e) {}
+    </script>
     <script type="module">
       if (import.meta.hot?.on) {
         import.meta.hot.on('vite:error', (error) => {

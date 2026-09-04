@@ -33,6 +33,7 @@ import {
   savePresets,
 } from '@/lib/presets';
 import { applyThemeToDom, loadUiPrefs, saveUiPrefs } from '@/lib/uiPrefs';
+import { blobForPreview } from '@/lib/imageFormats';
 
 interface AppState {
   mode: ProcessMode;
@@ -165,7 +166,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       logoFile: file,
       logoSource: source,
-      logoUrl: file ? URL.createObjectURL(file) : null,
+      logoUrl: file ? URL.createObjectURL(blobForPreview(file)) : null,
     });
   },
 
@@ -175,7 +176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       logo2File: file,
       logo2Source: source,
-      logo2Url: file ? URL.createObjectURL(file) : null,
+      logo2Url: file ? URL.createObjectURL(blobForPreview(file)) : null,
     });
   },
 
@@ -270,7 +271,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       progress: null,
       checkpoint: null,
       previewPath: first?.path ?? null,
-      previewImageUrl: first ? URL.createObjectURL(first.file) : null,
+      previewImageUrl: first ? URL.createObjectURL(blobForPreview(first.file)) : null,
     });
   },
 
@@ -280,7 +281,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (previewImageUrl) URL.revokeObjectURL(previewImageUrl);
     set({
       previewPath: path,
-      previewImageUrl: img ? URL.createObjectURL(img.file) : null,
+      previewImageUrl: img ? URL.createObjectURL(blobForPreview(img.file)) : null,
     });
   },
 

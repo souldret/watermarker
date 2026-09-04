@@ -30,7 +30,7 @@ Bu araç ücretsiz ve açık kaynaklıdır. Beğendiysen Kreosus üzerinden dest
 ### Temel
 - **Tekli işlem** — tek bölüm klasöründeki tüm görseller
 - **Çoklu işlem** — seri klasörü altındaki her bölüm klasörünü sırayla işler
-- **Logo watermark** — PNG / WebP / SVG (şeffaf PNG önerilir)
+- **Logo watermark** — PNG / WebP / AVIF / SVG (şeffaf PNG önerilir)
 - **9 noktalı konum ızgarası** — çoklu nokta seçimi (ör. sol üst + sağ alt)
 - **Boyut** — görsel genişliğine göre **%** veya sabit **px**
 - **Opaklık, kenar boşluğu, döndürme** (−45°…+45°)
@@ -83,7 +83,7 @@ Seri Adı/
 
 Çıktı ZIP / klasör yapısı bölüm hiyerarşisini korur.
 
-**Görseller:** `.jpg` `.jpeg` `.png` `.webp` `.bmp` `.gif`
+**Görseller:** `.jpg` `.jpeg` `.png` `.webp` `.avif` `.bmp` `.gif`
 **Logo:** şeffaf PNG tercih; WebP / SVG desteklenir.
 
 ---
@@ -287,7 +287,7 @@ This tool is free and open-source. If you find it useful, consider supporting vi
 ### Core
 - **Single mode** — all images in one chapter folder
 - **Batch mode** — processes every chapter subfolder in a series folder
-- **Logo watermark** — PNG / WebP / SVG (transparent PNG recommended)
+- **Logo watermark** — PNG / WebP / AVIF / SVG (transparent PNG recommended)
 - **9-point position grid** — multi-point selection (e.g. top-left + bottom-right)
 - **Size** — **%** of image width or fixed **px**
 - **Opacity, margin, rotation** (−45°…+45°)
@@ -340,7 +340,7 @@ Series Name/
 
 Output ZIP / folder preserves the chapter hierarchy.
 
-**Images:** `.jpg` `.jpeg` `.png` `.webp` `.bmp` `.gif`
+**Images:** `.jpg` `.jpeg` `.png` `.webp` `.avif` `.bmp` `.gif`
 **Logo:** transparent PNG preferred; WebP / SVG supported.
 
 ---

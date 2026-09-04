@@ -14,6 +14,7 @@
 import type { WatermarkSettings } from './types';
 import type { LogoSource } from './watermark';
 import { calcLogoSize } from './watermark';
+import { outputMimeFor } from './imageFormats';
 
 declare global {
   interface Window {
@@ -140,13 +141,7 @@ export async function applyWatermarkViaSharp(
     const gravity = positionToGravity(pos);
 
     // MIME
-    let outputMime = 'image/jpeg';
-    const lower = imageFile.name.toLowerCase();
-    if (settings.outputFormat === 'jpeg') outputMime = 'image/jpeg';
-    else if (settings.outputFormat === 'png') outputMime = 'image/png';
-    else if (settings.outputFormat === 'webp') outputMime = 'image/webp';
-    else if (lower.endsWith('.png')) outputMime = 'image/png';
-    else if (lower.endsWith('.webp')) outputMime = 'image/webp';
+    const { mime: outputMime } = outputMimeFor(settings.outputFormat, imageFile.name);
 
     const result = await window.electronSharp.applyWatermark({
       imageBuffer,

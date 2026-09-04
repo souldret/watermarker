@@ -13,6 +13,7 @@ import { applyWatermark } from './watermark';
 import { applyFilterToChapters, flattenJobs } from './pageFilter';
 import { buildOutputFileName } from './naming';
 import { pickOutputDirectory, writeBlobToTree } from './writeFolder';
+import { guessImageMime, outputMimeFor } from './imageFormats';
 import type { WatermarkWorkerRequest, WatermarkWorkerResponse } from './watermark.worker';
 
 export type LogFn = (level: 'info' | 'success' | 'warn' | 'error', message: string) => void;
@@ -148,12 +149,7 @@ class WorkerPool {
       worker.addEventListener('message', handler);
       worker.addEventListener('error', errHandler);
 
-      // Transfer ile kopyasız gönder
-      const transferables: Transferable[] = [];
-      if (req.logo1Buffer) transferables.push(req.logo1Buffer);
-      if (req.logo2Buffer) transferables.push(req.logo2Buffer);
-      transferables.push(req.imageBuffer);
-      worker.postMessage(req, transferables);
+      worker.postMessage(req, [req.imageBuffer]);
     });
   }
 
@@ -220,14 +216,7 @@ async function logoToBuffer(logo: LogoSource | null): Promise<ArrayBuffer | null
 }
 
 function mimeFor(format: WatermarkSettings['outputFormat'], originalName: string): { mime: string; ext: string } {
-  if (format === 'jpeg') return { mime: 'image/jpeg', ext: '.jpg' };
-  if (format === 'png') return { mime: 'image/png', ext: '.png' };
-  if (format === 'webp') return { mime: 'image/webp', ext: '.webp' };
-  const lower = originalName.toLowerCase();
-  if (lower.endsWith('.png')) return { mime: 'image/png', ext: '.png' };
-  if (lower.endsWith('.webp')) return { mime: 'image/webp', ext: '.webp' };
-  if (lower.endsWith('.bmp') || lower.endsWith('.gif')) return { mime: 'image/png', ext: '.png' };
-  return { mime: 'image/jpeg', ext: '.jpg' };
+  return outputMimeFor(format, originalName);
 }
 
 // ─── Pipeline Seçenekleri ──────────────────────────────────────────────────────
@@ -329,15 +318,12 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
       typeof OffscreenCanvas !== 'undefined' &&
       typeof createImageBitmap !== 'undefined'
     ) {
-      // Vite worker import URL'si
-      const workerUrl = new URL('./watermark.worker.ts', import.meta.url);
-      pool = new WorkerPool(workerUrl, workerCount);
-
-      // Logo buffer'larını bir kez hazırla
       logo1Buffer = await logoToBuffer(opts.logo);
       logo2Buffer = await logoToBuffer(opts.logo2);
 
       if (logo1Buffer || opts.settings.textWatermark?.enabled) {
+        const workerUrl = new URL('./watermark.worker.ts', import.meta.url);
+        pool = new WorkerPool(workerUrl, workerCount);
         useWorker = true;
         opts.onLog('info', `Worker pool: ${workerCount} worker ile paralel işleme.`);
       }
@@ -422,20 +408,16 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
       const { mime, ext } = mimeFor(opts.settings.outputFormat, job.image.name);
       const quality = mime === 'image/png' ? undefined : Math.min(1, Math.max(0.1, opts.settings.outputQuality));
 
-      if (useWorker && pool && logo1Buffer !== null) {
-        // Worker yolu
+      if (useWorker && pool) {
         const imageBuffer = await job.image.file.arrayBuffer();
-        // Logo buffer'larını kopyala (transfer sonrası orijinal geçersiz kalır)
-        const l1 = logo1Buffer ? logo1Buffer.slice(0) : null;
-        const l2 = logo2Buffer ? logo2Buffer.slice(0) : null;
-
         const req: WatermarkWorkerRequest = {
-          jobId: `${i}-${Date.now()}`,
+          jobId: `${i}`,
           imageBuffer,
-          logo1Buffer: l1,
+          imageMime: guessImageMime(job.image.name, job.image.file.type),
+          logo1Buffer,
           logo1Width: opts.logo?.width ?? 0,
           logo1Height: opts.logo?.height ?? 0,
-          logo2Buffer: opts.settings.logo2?.enabled ? l2 : null,
+          logo2Buffer: opts.settings.logo2?.enabled ? logo2Buffer : null,
           logo2Width: opts.logo2?.width ?? 0,
           logo2Height: opts.logo2?.height ?? 0,
           settings: opts.settings,
@@ -447,13 +429,12 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
         if (resp.error || !resp.buffer) throw new Error(resp.error || 'Worker boş yanıt');
         const blob = new Blob([resp.buffer], { type: mime });
         return { blob, ext };
-      } else {
-        // Fallback: ana thread
-        const { blob, ext: blobExt } = await applyWatermark(
-          job.image.file, opts.logo, opts.logo2, opts.settings,
-        );
-        return { blob, ext: blobExt };
       }
+
+      const { blob, ext: blobExt } = await applyWatermark(
+        job.image.file, opts.logo, opts.logo2, opts.settings,
+      );
+      return { blob, ext: blobExt };
     }
 
     // ─── Eşzamanlı işlem (worker pool destekli) ────────────────────────────────
@@ -571,7 +552,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
     if (!cancelled && useZip && zip && result.success > 0) {
       opts.onLog('info', 'ZIP paketleniyor...');
       const content = await zip.generateAsync(
-        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+        { type: 'blob', compression: 'STORE' },
         (meta) => {
           opts.onProgress({
             current: totalImages,
@@ -597,8 +578,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
       opts.onLog('info', 'Kısmi ZIP paketleniyor...');
       const content = await zip.generateAsync({
         type: 'blob',
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 },
+        compression: 'STORE',
       });
       downloadBlob(content, `${sanitizeZipName(opts.sourceLabel)}-partial-watermarked.zip`);
       opts.onLog('success', `Kısmi ZIP indirildi (${result.success} dosya).`);

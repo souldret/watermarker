@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { ImagePlus, X, Layers } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { loadLogo } from '@/lib/watermark';
+import { isLogoFile } from '@/lib/imageFormats';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/hooks/useI18n';
 import type { WatermarkPosition } from '@/lib/types';
@@ -47,7 +48,7 @@ export default function Logo2Panel() {
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      const file = [...e.dataTransfer.files].find((f) => /\.(png|webp|svg|jpg|jpeg)$/i.test(f.name));
+      const file = [...e.dataTransfer.files].find((f) => isLogoFile(f.name) || f.type.startsWith('image/'));
       if (file) void handleFile(file);
     },
     [handleFile],
@@ -93,7 +94,7 @@ export default function Logo2Panel() {
         <input
           ref={inputRef}
           type="file"
-          accept=".png,.webp,.svg,.jpg,.jpeg"
+          accept="image/*,.png,.webp,.svg,.jpg,.jpeg,.avif"
           className="hidden"
           onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
         />

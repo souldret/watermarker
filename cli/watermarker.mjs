@@ -70,7 +70,7 @@ function parseArgs(argv) {
   return args;
 }
 
-const IMAGE_RE = /\.(jpe?g|png|webp|bmp|gif)$/i;
+const IMAGE_RE = /\.(jpe?g|png|webp|avif|bmp|gif)$/i;
 
 function listImages(dir) {
   return fs

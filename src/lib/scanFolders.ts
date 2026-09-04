@@ -1,16 +1,13 @@
 import type { ChapterJob, ImageFile, ProcessMode } from './types';
+import { isImageFile } from './imageFormats';
 import { sortByNameNatural } from './sortNatural';
-
-const IMAGE_EXT = /\.(jpe?g|png|webp|bmp|gif)$/i;
 
 export type DirectoryPickResult =
   | { status: 'ok'; handle: FileSystemDirectoryHandle }
   | { status: 'cancelled' }
   | { status: 'unsupported' };
 
-export function isImageFile(name: string): boolean {
-  return IMAGE_EXT.test(name);
-}
+export { isImageFile };
 
 function toImageFile(file: File, path: string): ImageFile {
   return { name: file.name, path, file };

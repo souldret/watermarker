@@ -23,6 +23,8 @@ export interface WatermarkWorkerRequest {
   jobId: string;
   /** Ham görsel verisi */
   imageBuffer: ArrayBuffer;
+  /** Kaynak MIME (AVIF vb. decode için) */
+  imageMime?: string;
   /** Ham Logo 1 verisi (null ise logo yok) */
   logo1Buffer: ArrayBuffer | null;
   logo1Width: number;
@@ -78,14 +80,25 @@ function drawLogoAtOffscreen(
   ctx.restore();
 }
 
+let cachedLogo1: ImageBitmap | null = null;
+let cachedLogo2: ImageBitmap | null = null;
+
+async function ensureLogo(buffer: ArrayBuffer | null, slot: 1 | 2): Promise<ImageBitmap | null> {
+  if (!buffer) return null;
+  if (slot === 1) {
+    if (!cachedLogo1) cachedLogo1 = await createImageBitmap(new Blob([buffer]));
+    return cachedLogo1;
+  }
+  if (!cachedLogo2) cachedLogo2 = await createImageBitmap(new Blob([buffer]));
+  return cachedLogo2;
+}
+
 async function processJob(req: WatermarkWorkerRequest): Promise<ArrayBuffer> {
   assertOffscreenSupport();
 
-  // Görsel decode
-  const imageBlob = new Blob([req.imageBuffer]);
+  // Görsel decode — MIME belirtilmezse tarayıcı uzantısız buffer'ı tanıyamayabilir (AVIF)
+  const imageBlob = new Blob([req.imageBuffer], req.imageMime ? { type: req.imageMime } : undefined);
   let imageBitmap: ImageBitmap | null = await createImageBitmap(imageBlob);
-  let logo1Bitmap: ImageBitmap | null = null;
-  let logo2Bitmap: ImageBitmap | null = null;
 
   try {
     const { width, height } = imageBitmap;
@@ -102,13 +115,9 @@ async function processJob(req: WatermarkWorkerRequest): Promise<ArrayBuffer> {
     imageBitmap.close();
     imageBitmap = null;
 
-    // Logo 1
-    if (req.logo1Buffer) {
-      const logo1Blob = new Blob([req.logo1Buffer]);
-      logo1Bitmap = await createImageBitmap(logo1Blob);
+    const logo1Bitmap = await ensureLogo(req.logo1Buffer, 1);
+    if (logo1Bitmap) {
       const logo1: LogoSource = { width: req.logo1Width, height: req.logo1Height, bitmap: logo1Bitmap };
-
-      // smartPosition worker'da desteklenmez (DOM gerektiriyor) — ilk pozisyonu kullan
       const positions =
         req.settings.positions && req.settings.positions.length > 0
           ? [...req.settings.positions]
@@ -126,14 +135,10 @@ async function processJob(req: WatermarkWorkerRequest): Promise<ArrayBuffer> {
           drawLogoAtOffscreen(ctx, logo1Bitmap, rect, req.settings.opacity, req.settings.rotation);
         }
       }
-      logo1Bitmap.close();
-      logo1Bitmap = null;
     }
 
-    // Logo 2
-    if (req.logo2Buffer && req.settings.logo2?.enabled) {
-      const logo2Blob = new Blob([req.logo2Buffer]);
-      logo2Bitmap = await createImageBitmap(logo2Blob);
+    const logo2Bitmap = req.settings.logo2?.enabled ? await ensureLogo(req.logo2Buffer, 2) : null;
+    if (logo2Bitmap && req.settings.logo2?.enabled) {
       const l2 = req.settings.logo2;
       const positions = l2.positions.length > 0 ? l2.positions : ['bl' as const];
 
@@ -147,8 +152,6 @@ async function processJob(req: WatermarkWorkerRequest): Promise<ArrayBuffer> {
         );
         drawLogoAtOffscreen(ctx, logo2Bitmap, rect, l2.opacity, l2.rotation);
       }
-      logo2Bitmap.close();
-      logo2Bitmap = null;
     }
 
     // Metin watermark — OffscreenCanvas'ta drawTextWatermark çalışır (ctx2d uyumlu)
@@ -162,18 +165,19 @@ async function processJob(req: WatermarkWorkerRequest): Promise<ArrayBuffer> {
       );
     }
 
-    // Encode
-    const blob = await canvas.convertToBlob({
-      type: req.mime,
-      quality: req.quality,
-    });
+    let blob: Blob;
+    try {
+      blob = await canvas.convertToBlob({
+        type: req.mime,
+        quality: req.quality,
+      });
+    } catch {
+      blob = await canvas.convertToBlob({ type: 'image/png' });
+    }
 
     return await blob.arrayBuffer();
   } finally {
-    // Hata durumunda dahi bitmap'ler garantili kapatılır — GPU/bellek sızıntısını önler
     imageBitmap?.close();
-    logo1Bitmap?.close();
-    logo2Bitmap?.close();
   }
 }
 

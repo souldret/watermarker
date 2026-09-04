@@ -97,6 +97,18 @@ describe('naming', () => {
     });
     expect(name).toBe('001_wm.jpg');
   });
+
+  it('AVIF same-format çıktısı png uzantısı alır', () => {
+    const name = buildOutputFileName({
+      originalName: '001.avif',
+      chapterName: 'Bolum 1',
+      indexInChapter: 0,
+      pattern: 'suffix',
+      customTemplate: '',
+      outputFormat: 'same',
+    });
+    expect(name).toBe('001_wm.png');
+  });
 });
 
 describe('pickSmartPosition', () => {

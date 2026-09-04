@@ -24,8 +24,8 @@ export default {
         },
       },
       fontFamily: {
-        display: ['Syne', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
-        sans: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
+        display: ['Segoe UI', 'system-ui', 'sans-serif'],
+        sans: ['Segoe UI', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         seal: '0 8px 24px rgb(var(--seal) / 0.28)',

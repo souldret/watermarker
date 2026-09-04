@@ -8,7 +8,10 @@ let tray = null;
 
 // ─── Sharp entegrasyonu (opsiyonel — yoksa sessizce Canvas 2D fallback) ────────
 let sharpLib = null;
+let sharpLoadAttempted = false;
 function tryLoadSharp() {
+  if (sharpLoadAttempted) return;
+  sharpLoadAttempted = true;
   try {
     sharpLib = require('sharp');
     console.log('[sharp] Native modül yüklendi.');
@@ -89,11 +92,13 @@ async function applyWatermarkSharp(opts) {
 // ─── IPC Handlers ──────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
-  /** sharp mevcudiyetini sorgula */
-  ipcMain.handle('sharp:available', () => sharpLib !== null);
+  ipcMain.handle('sharp:available', () => {
+    tryLoadSharp();
+    return sharpLib !== null;
+  });
 
-  /** Sharp ile watermark uygula */
   ipcMain.handle('sharp:applyWatermark', async (_event, opts) => {
+    tryLoadSharp();
     return applyWatermarkSharp(opts);
   });
 }
@@ -231,7 +236,6 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    tryLoadSharp();
     registerIpcHandlers();
     createWindow();
     createTray();

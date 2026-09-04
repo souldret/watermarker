@@ -2,7 +2,6 @@ import { Eraser, Play, Stamp, Square } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { countImages } from '@/lib/scanFolders';
 import { countFiltered } from '@/lib/pageFilter';
-import { runProcessPipeline } from '@/lib/processPipeline';
 import { useI18n } from '@/hooks/useI18n';
 
 export default function ActionBar() {
@@ -76,6 +75,7 @@ export default function ActionBar() {
     );
 
     try {
+      const { runProcessPipeline } = await import('@/lib/processPipeline');
       const result = await runProcessPipeline({
         chapters: currentChapters,
         logo: currentLogo,

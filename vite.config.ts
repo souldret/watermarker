@@ -3,33 +3,33 @@ import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   // Electron / file:// için göreli asset yolları
   base: './',
   build: {
+    target: 'es2022',
     sourcemap: false,
     emptyOutDir: true,
+    cssCodeSplit: true,
     rollupOptions: {
       output: {
-        // Vendor kütüphanelerini ayrı chunk'lara böl — uygulama kodu
-        // değiştiğinde tarayıcı cache'i vendor chunk'ları için geçerli kalır,
-        // ilk yükleme de büyük tek bir bundle yerine paralel indirilebilir.
         manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-react': ['react', 'react-dom'],
           'vendor-state': ['zustand'],
           'vendor-icons': ['lucide-react'],
         },
       },
     },
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'zustand', 'lucide-react', 'clsx', 'tailwind-merge'],
+  },
   plugins: [
-    react({
-      babel: {
-        plugins: [
-          'react-dev-locator',
-        ],
-      },
-    }),
+    react(
+      command === 'serve'
+        ? { babel: { plugins: ['react-dev-locator'] } }
+        : undefined,
+    ),
     tsconfigPaths()
   ],
-})
+}))

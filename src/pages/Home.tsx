@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import Header from '@/components/Header';
 import LogoPanel from '@/components/LogoPanel';
 import Logo2Panel from '@/components/Logo2Panel';
@@ -15,22 +16,27 @@ import PresetPanel from '@/components/PresetPanel';
 import AdvancedOptions from '@/components/AdvancedOptions';
 import TemplatePackPanel from '@/components/TemplatePackPanel';
 import SummaryCard from '@/components/SummaryCard';
-import Wizard from '@/components/Wizard';
 import { useI18n } from '@/hooks/useI18n';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
 
+const Wizard = lazy(() => import('@/components/Wizard'));
+
 export default function Home() {
   const { t } = useI18n();
   const compact = useAppStore((s) => s.ui.compact);
+  const wizardDone = useAppStore((s) => s.ui.wizardDone);
 
   return (
     <div className={cn('app-shell relative min-h-screen text-ink-text', compact && 'compact-ui')}>
       <div className="bg-mesh pointer-events-none fixed inset-0 -z-10" />
-      <div className="noise-overlay pointer-events-none fixed inset-0 -z-10" />
 
       <Header />
-      <Wizard />
+      {!wizardDone && (
+        <Suspense fallback={null}>
+          <Wizard />
+        </Suspense>
+      )}
 
       <main
         className={cn(

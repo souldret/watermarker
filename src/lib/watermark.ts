@@ -4,11 +4,11 @@ import type {
   CustomXY,
   CustomXYMode,
   Logo2Settings,
-  OutputFormat,
   TextWatermark,
   WatermarkPosition,
   WatermarkSettings,
 } from './types';
+import { extFromMime, guessImageMime, outputMimeFor } from './imageFormats';
 import { pickSmartPosition } from './smartPosition';
 
 /** Tek bir watermark rect'i */
@@ -29,14 +29,21 @@ function loadHtmlImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+function blobForDecode(file: File): Blob {
+  const mime = guessImageMime(file.name, file.type);
+  if (file.type === mime) return file;
+  return file.slice(0, file.size, mime);
+}
+
 async function decodeImageFile(
   file: File,
   options?: { retainObjectUrl?: boolean },
 ): Promise<ImageBitmap | HTMLImageElement> {
+  const source = blobForDecode(file);
   try {
-    return await createImageBitmap(file);
+    return await createImageBitmap(source);
   } catch {
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(source);
     const img = await loadHtmlImage(url);
     if (!options?.retainObjectUrl) URL.revokeObjectURL(url);
     return img;
@@ -276,7 +283,7 @@ export function drawTextWatermark(
   ctx.save();
   ctx.globalAlpha = Math.min(1, Math.max(0, tw.opacity));
   ctx.fillStyle = tw.color || '#FFFFFF';
-  ctx.font = `600 ${fontSize}px "IBM Plex Sans", system-ui, sans-serif`;
+  ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
   ctx.textBaseline = 'top';
   const metrics = ctx.measureText(tw.text);
   const twW = metrics.width;
@@ -344,15 +351,8 @@ export async function loadImageFromFile(file: File): Promise<ImageBitmap | HTMLI
   return decodeImageFile(file);
 }
 
-function mimeFor(format: OutputFormat, originalName: string): { mime: string; ext: string } {
-  if (format === 'jpeg') return { mime: 'image/jpeg', ext: '.jpg' };
-  if (format === 'png') return { mime: 'image/png', ext: '.png' };
-  if (format === 'webp') return { mime: 'image/webp', ext: '.webp' };
-  const lower = originalName.toLowerCase();
-  if (lower.endsWith('.png')) return { mime: 'image/png', ext: '.png' };
-  if (lower.endsWith('.webp')) return { mime: 'image/webp', ext: '.webp' };
-  if (lower.endsWith('.bmp') || lower.endsWith('.gif')) return { mime: 'image/png', ext: '.png' };
-  return { mime: 'image/jpeg', ext: '.jpg' };
+function mimeFor(format: WatermarkSettings['outputFormat'], originalName: string): { mime: string; ext: string } {
+  return outputMimeFor(format, originalName);
 }
 
 /** Tek görsele logo(lar) + metin watermark bas */
@@ -430,16 +430,24 @@ export async function applyWatermark(
     mime === 'image/png' ? undefined : Math.min(1, Math.max(0.1, settings.outputQuality));
 
   const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('Görsel encode edilemedi'))),
-      mime,
-      quality,
-    );
+    const finish = (b: Blob | null, fallback = false) => {
+      if (b) {
+        resolve(b);
+        return;
+      }
+      if (!fallback) {
+        canvas.toBlob((b2) => finish(b2, true), 'image/png');
+        return;
+      }
+      reject(new Error('Görsel encode edilemedi'));
+    };
+    canvas.toBlob((b) => finish(b), mime, quality);
   });
 
   canvas.width = 0;
   canvas.height = 0;
-  return { blob, mime, ext };
+  const outMime = blob.type || mime;
+  return { blob, mime: outMime, ext: outMime === mime ? ext : extFromMime(outMime) };
 }
 
 /** Önizleme canvas'ına watermark'ları çiz (ölçeklenmiş, DPR-aware) */

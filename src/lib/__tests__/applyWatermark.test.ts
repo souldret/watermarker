@@ -173,6 +173,17 @@ describe('applyWatermark — entegrasyon', () => {
     expect(result.mime).toBe('image/jpeg');
   });
 
+  it('AVIF + same formatında PNG\'ye düşer', async () => {
+    const data = new Uint8Array(512).fill(0);
+    const file = new File([data], 'page.avif', { type: '' });
+    const logo = makeFakeLogo();
+    const settings = { ...DEFAULT_SETTINGS, outputFormat: 'same' as const };
+
+    const result = await applyWatermark(file, logo, null, settings);
+    expect(result.ext).toBe('.png');
+    expect(result.mime).toBe('image/png');
+  });
+
   it('logo null ama textWatermark enabled — hata vermez', async () => {
     const file = makeFakeImageFile('text-only.jpg');
     const settings = {
