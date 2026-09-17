@@ -40,6 +40,19 @@ describe('calcLogoRects — normal görsel (long-strip devre dışı)', () => {
 });
 
 describe('calcLogoRects — uzun şerit (long-strip aktif)', () => {
+  it('taşan y değerleri alt kenara clamp edilmez (çift logo yok)', () => {
+    const rects = calcLogoRects(800, 3200, 100, 50, 'br', {
+      ...baseSettings,
+      longStripMode: { enabled: true, aspectThreshold: 3, repeatEveryPx: 1500 },
+    });
+    const ys = rects.map((r) => r.y);
+    expect(new Set(ys).size).toBe(ys.length);
+    const maxY = Math.max(0, 3200 - rects[0].h);
+    for (const r of rects) {
+      expect(r.y).toBeLessThanOrEqual(maxY);
+    }
+  });
+
   it('800x9000 görselde en az 4 rect döner', () => {
     const rects = calcLogoRects(800, 9000, 100, 50, 'br', baseSettings);
     // 9000 / 1500 = 6 → en az 4 bekliyoruz

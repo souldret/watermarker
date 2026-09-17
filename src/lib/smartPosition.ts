@@ -156,40 +156,49 @@ function sampleActivityFromBuffer(
   const sh = Math.max(1, Math.min(Math.floor(h), fullData.height - sy));
   if (sw < 1 || sh < 1) return 0;
 
-  const src = fullData.data;
-  const region = new Uint8ClampedArray(sw * sh * 4);
-  for (let ry = 0; ry < sh; ry++) {
-    const srcStart = ((sy + ry) * fullW + sx) * 4;
-    const dstStart = ry * sw * 4;
-    region.set(src.subarray(srcStart, srcStart + sw * 4), dstStart);
-  }
-
-  return scoreFromPixels(region);
+  return scoreFromPixelsRegion(fullData.data, fullW, sx, sy, sw, sh);
 }
 
 /** sampleActivity ile aynı skorlama algoritması — düz piksel dizisi üzerinden. */
 function scoreFromPixels(px: Uint8ClampedArray): number {
-  const step = Math.max(1, Math.floor(px.length / 4 / 400));
+  return scoreFromPixelsRegion(px, px.length / 4, 0, 0, px.length / 4, 1);
+}
+
+/**
+ * Tam canvas buffer'ından bölge skorlar — ara kopya üretmez.
+ * Satır-satır örnekleme, orijinal scoreFromPixels ile aynı varyans + kenar formülü.
+ */
+function scoreFromPixelsRegion(
+  px: Uint8ClampedArray,
+  fullW: number,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+): number {
+  const pixelCount = Math.max(1, sw * sh);
+  const step = Math.max(1, Math.floor(pixelCount / 400));
   let sum = 0;
   let sumSq = 0;
   let n = 0;
   let edge = 0;
+  let prevY = 0;
+  let hasPrev = false;
 
-  for (let i = 0; i < px.length; i += 4 * step) {
-    const r = px[i];
-    const g = px[i + 1];
-    const b = px[i + 2];
+  for (let i = 0; i < pixelCount; i += step) {
+    const lx = i % sw;
+    const ly = Math.floor(i / sw);
+    const idx = ((sy + ly) * fullW + (sx + lx)) * 4;
+    const r = px[idx];
+    const g = px[idx + 1];
+    const b = px[idx + 2];
     const yv = 0.299 * r + 0.587 * g + 0.114 * b;
     sum += yv;
     sumSq += yv * yv;
     n += 1;
-    if (i + 4 < px.length) {
-      const r2 = px[i + 4];
-      const g2 = px[i + 5];
-      const b2 = px[i + 6];
-      const y2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
-      edge += Math.abs(yv - y2);
-    }
+    if (hasPrev) edge += Math.abs(yv - prevY);
+    prevY = yv;
+    hasPrev = true;
   }
   if (n === 0) return 0;
   const mean = sum / n;

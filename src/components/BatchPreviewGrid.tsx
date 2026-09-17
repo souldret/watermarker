@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { Grid3x3, ImageIcon } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { drawPreview } from '@/lib/watermark';
+import { blobForPreview } from '@/lib/imageFormats';
 import { useI18n } from '@/hooks/useI18n';
 
 const THUMB_MAX_W = 160;
@@ -83,7 +84,7 @@ const ThumbCanvas = memo(function ThumbCanvas({ file, label }: ThumbCanvasProps)
   // Görsel yükle
   useEffect(() => {
     let cancelled = false;
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(blobForPreview(file));
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;

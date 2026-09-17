@@ -59,3 +59,39 @@ export function blobForPreview(file: File): Blob {
   if (file.type === mime) return file;
   return file.slice(0, file.size, mime);
 }
+
+async function readFileHeader(file: Blob, maxBytes: number): Promise<Uint8Array> {
+  const header = file.size > maxBytes ? file.slice(0, maxBytes) : file;
+  try {
+    const buf = await header.arrayBuffer();
+    if (buf.byteLength > 0) return new Uint8Array(buf);
+  } catch {
+    // FileReader yedeği
+  }
+  if (typeof FileReader === 'undefined') return new Uint8Array();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array((reader.result as ArrayBuffer) || new ArrayBuffer(0)));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(header);
+  });
+}
+
+/**
+ * Animasyonlu WebP tespiti — VP8X/ANIM chunk'ı header'da ara.
+ * Tüm dosyayı okumaz (uzun şeritlerde maliyetli).
+ */
+export async function isAnimatedWebp(file: File): Promise<boolean> {
+  if (!/\.webp$/i.test(file.name)) return false;
+  try {
+    const bytes = await readFileHeader(file, 512);
+    for (let i = 0; i < bytes.length - 3; i++) {
+      if (bytes[i] === 65 && bytes[i + 1] === 78 && bytes[i + 2] === 73 && bytes[i + 3] === 77) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}

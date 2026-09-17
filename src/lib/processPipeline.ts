@@ -13,8 +13,12 @@ import { applyWatermark } from './watermark';
 import { applyFilterToChapters, flattenJobs } from './pageFilter';
 import { buildOutputFileName } from './naming';
 import { pickOutputDirectory, writeBlobToTree } from './writeFolder';
-import { guessImageMime, outputMimeFor } from './imageFormats';
-import type { WatermarkWorkerRequest, WatermarkWorkerResponse } from './watermark.worker';
+import { extFromMime, guessImageMime, isAnimatedWebp, outputMimeFor } from './imageFormats';
+import type {
+  WatermarkWorkerInit,
+  WatermarkWorkerRequest,
+  WatermarkWorkerResponse,
+} from './watermark.worker';
 
 export type LogFn = (level: 'info' | 'success' | 'warn' | 'error', message: string) => void;
 
@@ -66,26 +70,10 @@ function isGif(name: string): boolean {
   return /\.gif$/i.test(name);
 }
 
-/**
- * Animasyonlu WebP tespiti — dosya header'ında ANIM chunk'ı ara.
- * WebP container formatı: RIFF....WEBP VP8 /VP8L/VP8X — animasyonlu ise ANIM chunk içerir.
- */
-async function isAnimatedWebp(file: File): Promise<boolean> {
-  if (!/\.webp$/i.test(file.name)) return false;
-  try {
-    // İlk 100 byte'a bak (ANIM chunk header genelde ilk 50 byte'ta)
-    const buf = await file.slice(0, 100).arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    // "ANIM" ASCII = 65,78,73,77
-    for (let i = 0; i < bytes.length - 3; i++) {
-      if (bytes[i] === 65 && bytes[i+1] === 78 && bytes[i+2] === 73 && bytes[i+3] === 77) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
+function cloneArrayBuffer(src: ArrayBuffer): ArrayBuffer {
+  const copy = new ArrayBuffer(src.byteLength);
+  new Uint8Array(copy).set(new Uint8Array(src));
+  return copy;
 }
 
 // ─── Worker Pool ──────────────────────────────────────────────────────────────
@@ -98,29 +86,79 @@ class WorkerPool {
   private workers: Worker[] = [];
   private idle: Worker[] = [];
   private queue: Array<{ resolve: (w: Worker) => void }> = [];
-  private readonly size: number;
+  private terminated = false;
+  private readonly timeoutMs: number;
+  private readonly ready: Promise<boolean>;
 
-  constructor(workerUrl: string | URL, size: number) {
-    this.size = size;
+  constructor(
+    workerUrl: string | URL,
+    size: number,
+    logos?: { logo1: ArrayBuffer | null; logo2: ArrayBuffer | null },
+    timeoutMs = 90_000,
+  ) {
+    this.timeoutMs = timeoutMs;
+    const readyWaits: Promise<boolean>[] = [];
     for (let i = 0; i < size; i++) {
       const w = new Worker(workerUrl, { type: 'module' });
+      if (logos && (logos.logo1 || logos.logo2)) {
+        readyWaits.push(
+          new Promise<boolean>((resolve) => {
+            let done = false;
+            const finish = (ok: boolean) => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              w.removeEventListener('message', onReady);
+              resolve(ok);
+            };
+            const onReady = (e: MessageEvent<{ type?: string }>) => {
+              if (e.data?.type === 'ready') finish(true);
+            };
+            const timer = setTimeout(() => finish(false), 5000);
+            w.addEventListener('message', onReady);
+            const init: WatermarkWorkerInit = {
+              type: 'init',
+              logo1Buffer: logos.logo1 ? cloneArrayBuffer(logos.logo1) : null,
+              logo2Buffer: logos.logo2 ? cloneArrayBuffer(logos.logo2) : null,
+            };
+            const transfer: Transferable[] = [];
+            if (init.logo1Buffer) transfer.push(init.logo1Buffer);
+            if (init.logo2Buffer) transfer.push(init.logo2Buffer);
+            w.postMessage(init, transfer);
+          }),
+        );
+      }
       this.workers.push(w);
       this.idle.push(w);
     }
+    this.ready = readyWaits.length
+      ? Promise.all(readyWaits).then((flags) => flags.every(Boolean))
+      : Promise.resolve(true);
+  }
+
+  waitUntilReady(): Promise<boolean> {
+    return this.ready;
   }
 
   /** Boş worker al (yoksa bekle) */
   private acquire(): Promise<Worker> {
+    if (this.terminated) return Promise.reject(new Error('Worker pool kapandı'));
     if (this.idle.length > 0) {
       return Promise.resolve(this.idle.pop()!);
     }
-    return new Promise((resolve) => {
-      this.queue.push({ resolve });
+    return new Promise((resolve, reject) => {
+      this.queue.push({
+        resolve: (w) => {
+          if (this.terminated) reject(new Error('Worker pool kapandı'));
+          else resolve(w);
+        },
+      });
     });
   }
 
   /** Worker'ı havuza iade et */
   private release(w: Worker): void {
+    if (this.terminated) return;
     if (this.queue.length > 0) {
       const next = this.queue.shift()!;
       next.resolve(w);
@@ -133,28 +171,38 @@ class WorkerPool {
   async run(req: WatermarkWorkerRequest): Promise<WatermarkWorkerResponse> {
     const worker = await this.acquire();
     return new Promise<WatermarkWorkerResponse>((resolve, reject) => {
-      const handler = (e: MessageEvent<WatermarkWorkerResponse>) => {
-        if (e.data.jobId !== req.jobId) return;
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         worker.removeEventListener('message', handler);
         worker.removeEventListener('error', errHandler);
         this.release(worker);
-        resolve(e.data);
+        fn();
+      };
+      const handler = (e: MessageEvent<WatermarkWorkerResponse & { type?: string }>) => {
+        if (!e.data || e.data.type === 'ready' || e.data.jobId !== req.jobId) return;
+        finish(() => resolve(e.data));
       };
       const errHandler = (e: ErrorEvent) => {
-        worker.removeEventListener('message', handler);
-        worker.removeEventListener('error', errHandler);
-        this.release(worker);
-        reject(new Error(e.message || 'Worker crash'));
+        finish(() => reject(new Error(e.message || 'Worker crash')));
       };
+      const timer = setTimeout(() => {
+        finish(() => reject(new Error('Worker zaman aşımı')));
+      }, this.timeoutMs);
       worker.addEventListener('message', handler);
       worker.addEventListener('error', errHandler);
-
-      worker.postMessage(req, [req.imageBuffer]);
+      const transfer: Transferable[] = [req.imageBuffer];
+      if (req.logo1Buffer) transfer.push(req.logo1Buffer);
+      if (req.logo2Buffer) transfer.push(req.logo2Buffer);
+      worker.postMessage(req, transfer);
     });
   }
 
   /** Tüm worker'ları kapat */
   terminate(): void {
+    this.terminated = true;
     for (const w of this.workers) w.terminate();
     this.workers = [];
     this.idle = [];
@@ -311,6 +359,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
   let logo1Buffer: ArrayBuffer | null = null;
   let logo2Buffer: ArrayBuffer | null = null;
   let useWorker = false;
+  let logosPreloaded = false;
 
   try {
     if (
@@ -323,7 +372,13 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
 
       if (logo1Buffer || opts.settings.textWatermark?.enabled) {
         const workerUrl = new URL('./watermark.worker.ts', import.meta.url);
-        pool = new WorkerPool(workerUrl, workerCount);
+        pool = new WorkerPool(workerUrl, workerCount, {
+          logo1: logo1Buffer,
+          logo2: opts.settings.logo2?.enabled ? logo2Buffer : null,
+        });
+        await pool.waitUntilReady().then((ok) => {
+          logosPreloaded = ok;
+        });
         useWorker = true;
         opts.onLog('info', `Worker pool: ${workerCount} worker ile paralel işleme.`);
       }
@@ -414,10 +469,12 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
           jobId: `${i}`,
           imageBuffer,
           imageMime: guessImageMime(job.image.name, job.image.file.type),
-          logo1Buffer,
+          logo1Buffer: logosPreloaded ? null : (logo1Buffer ? cloneArrayBuffer(logo1Buffer) : null),
           logo1Width: opts.logo?.width ?? 0,
           logo1Height: opts.logo?.height ?? 0,
-          logo2Buffer: opts.settings.logo2?.enabled ? logo2Buffer : null,
+          logo2Buffer: logosPreloaded
+            ? null
+            : (opts.settings.logo2?.enabled && logo2Buffer ? cloneArrayBuffer(logo2Buffer) : null),
           logo2Width: opts.logo2?.width ?? 0,
           logo2Height: opts.logo2?.height ?? 0,
           settings: opts.settings,
@@ -427,8 +484,9 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
 
         const resp = await pool.run(req);
         if (resp.error || !resp.buffer) throw new Error(resp.error || 'Worker boş yanıt');
-        const blob = new Blob([resp.buffer], { type: mime });
-        return { blob, ext };
+        const outMime = resp.mime || mime;
+        const blob = new Blob([resp.buffer], { type: outMime });
+        return { blob, ext: outMime === mime ? ext : extFromMime(outMime) };
       }
 
       const { blob, ext: blobExt } = await applyWatermark(
@@ -510,7 +568,8 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
 
       const res = results.get(i);
       if (!res) {
-        // skip (GIF/animasyonlu WebP) — zaten sayıldı
+        // skip (GIF/animasyonlu WebP) veya iptal nedeniyle hiç işlenmedi
+        if (cancelled && !completedSet.has(i) && !errors.has(i)) break;
         continue;
       }
 
@@ -586,7 +645,8 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
       opts.onLog('error', 'Hiçbir görsel işlenemedi.');
     }
 
-    if (!cancelled) opts.onCheckpoint(null);
+    if (cancelled) saveCp();
+    else opts.onCheckpoint(null);
     result.elapsedMs = Date.now() - startedAt;
     return result;
   }

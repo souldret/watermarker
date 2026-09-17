@@ -70,7 +70,29 @@ function InteractivePreview() {
    * previewImageUrl/logo/settings değiştiğinde (drawBase) yapılır, hover'da
    * sadece son çizilmiş taban üzerine overlay eklenir (offscreen cache).
    */
-  const baseSnapshotRef = useRef<ImageData | null>(null);
+  const baseSnapshotRef = useRef<OffscreenCanvas | HTMLCanvasElement | null>(null);
+
+  const snapshotBase = (source: HTMLCanvasElement) => {
+    try {
+      if (typeof OffscreenCanvas !== 'undefined') {
+        const snap = new OffscreenCanvas(source.width, source.height);
+        const sctx = snap.getContext('2d');
+        if (!sctx) return;
+        sctx.drawImage(source, 0, 0);
+        baseSnapshotRef.current = snap;
+        return;
+      }
+      const snap = document.createElement('canvas');
+      snap.width = source.width;
+      snap.height = source.height;
+      const sctx = snap.getContext('2d');
+      if (!sctx) return;
+      sctx.drawImage(source, 0, 0);
+      baseSnapshotRef.current = snap;
+    } catch {
+      baseSnapshotRef.current = null;
+    }
+  };
 
   const drawOverlay = useCallback(() => {
     const canvas = canvasRef.current;
@@ -78,18 +100,20 @@ function InteractivePreview() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const dpr = window.devicePixelRatio || 1;
     // Taban görüntüyü (watermark render sonucu) snapshot'tan geri yükle —
-    // böylece overlay çizmeden önce watermark'ı yeniden hesaplamamıza gerek kalmaz.
+    // getImageData büyük önizlemede CPU'yu kilitler; drawImage GPU kopyası kullanır.
     if (baseSnapshotRef.current) {
-      ctx.putImageData(baseSnapshotRef.current, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(baseSnapshotRef.current, 0, 0);
     }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const overlayXY = ghostXY || hoverXY;
     if (!pinTarget || !overlayXY) return;
 
     const cssW = parseFloat(canvas.style.width) || canvas.width;
     const cssH = parseFloat(canvas.style.height) || canvas.height;
-    const dpr = window.devicePixelRatio || 1;
     const cx = overlayXY.x * cssW;
     const cy = overlayXY.y * cssH;
     const color = pinTarget === 'logo1' ? 'rgba(255,77,77,0.85)' : 'rgba(80,180,255,0.85)';
@@ -150,16 +174,8 @@ function InteractivePreview() {
       // önizleme hatası kritik değil
     }
 
-    // Taban çizimi snapshot'la — overlay her hover'da bu snapshot'tan geri
-    // yüklenir, watermark yeniden hesaplanmaz.
-    const ctx = canvas.getContext('2d');
-    if (ctx && canvas.width > 0 && canvas.height > 0) {
-      try {
-        baseSnapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      } catch {
-        baseSnapshotRef.current = null;
-      }
-    }
+    if (canvas.width > 0 && canvas.height > 0) snapshotBase(canvas);
+    else baseSnapshotRef.current = null;
 
     drawOverlay();
   }, [previewImageUrl, logoSource, logo2Source, settings, recalcMaxDims, drawOverlay]);

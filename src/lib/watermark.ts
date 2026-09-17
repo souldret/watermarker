@@ -37,16 +37,21 @@ function blobForDecode(file: File): Blob {
 
 async function decodeImageFile(
   file: File,
-  options?: { retainObjectUrl?: boolean },
+  persistObjectUrl = false,
 ): Promise<ImageBitmap | HTMLImageElement> {
   const source = blobForDecode(file);
   try {
     return await createImageBitmap(source);
   } catch {
     const url = URL.createObjectURL(source);
-    const img = await loadHtmlImage(url);
-    if (!options?.retainObjectUrl) URL.revokeObjectURL(url);
-    return img;
+    try {
+      const img = await loadHtmlImage(url);
+      if (!persistObjectUrl) URL.revokeObjectURL(url);
+      return img;
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      throw err;
+    }
   }
 }
 
@@ -210,20 +215,22 @@ export function calcLogoRects(
   const aspectRatio = imageH / Math.max(1, imageW);
   if (aspectRatio < lsm.aspectThreshold) return [baseRect];
 
-  // Uzun şerit: Y ekseninde tekrarla
+  // Uzun şerit: Y ekseninde tekrarla.
+  // Taşan y değerlerini imageH-h'ye clamp etmek alt kenarda aynı logoyu
+  // defalarca basıyordu — taşan adayları atlıyoruz.
   const rects: Rect[] = [];
   const repeatEvery = Math.max(50, lsm.repeatEveryPx);
-  // İlk tekrarı baseRect.y'den başlat, sonra repeatEvery aralıklarla ekle
-  // Başlangıç konumunu Y=0'dan başlatıp grid'e hizala
-  const startY = baseRect.y % repeatEvery;
+  const maxY = Math.max(0, imageH - baseRect.h);
+  const startY = Math.min(baseRect.y % repeatEvery, maxY);
   let y = startY;
-  while (y < imageH) {
-    // Logo görsel dışına taşmasın
-    const clampedY = Math.min(Math.max(0, y), Math.max(0, imageH - baseRect.h));
-    rects.push({ ...baseRect, y: clampedY });
+  let lastY = Number.NaN;
+  while (y <= maxY) {
+    if (y !== lastY) {
+      rects.push({ ...baseRect, y });
+      lastY = y;
+    }
     y += repeatEvery;
-    // Sonsuz döngü koruması
-    if (rects.length > 500) break;
+    if (rects.length >= 500) break;
   }
   return rects.length > 0 ? rects : [baseRect];
 }
@@ -314,7 +321,7 @@ const smartPositionCache = new WeakMap<
   { candidatesKey: string; result: WatermarkPosition }
 >();
 
-function resolvePositions(
+export function resolveWatermarkPositions(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
@@ -340,8 +347,16 @@ function resolvePositions(
   return [smart, ...base.filter((p) => p !== smart)];
 }
 
+export function revokeLogoBitmap(source: LogoSource | null): void {
+  const bitmap = source?.bitmap;
+  if (bitmap && 'src' in bitmap && typeof bitmap.src === 'string' && bitmap.src.startsWith('blob:')) {
+    URL.revokeObjectURL(bitmap.src);
+  }
+}
+
 export async function loadLogo(file: File): Promise<LogoSource> {
-  const bitmap = await decodeImageFile(file, { retainObjectUrl: true });
+  // SVG vb. createImageBitmap desteklemeyebilir; HTMLImage src'si çizim süresince kalmalı.
+  const bitmap = await decodeImageFile(file, true);
   const { width, height } = getSourceSize(bitmap);
   if (width < 1 || height < 1) throw new Error('Logo boyutu geçersiz');
   return { width, height, bitmap };
@@ -385,11 +400,11 @@ export async function applyWatermark(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(image, 0, 0);
-  if ('close' in image && typeof image.close === 'function') image.close();
 
   // — Logo 1 —
   if (logo) {
-    const positions = resolvePositions(ctx, canvas.width, canvas.height, settings, image);
+    const positions = resolveWatermarkPositions(ctx, canvas.width, canvas.height, settings, image);
+    if ('close' in image && typeof image.close === 'function') image.close();
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
       const rects = calcLogoRects(
@@ -402,6 +417,8 @@ export async function applyWatermark(
         drawLogoAt(ctx, logo, rect, settings.opacity, settings.rotation);
       }
     }
+  } else if ('close' in image && typeof image.close === 'function') {
+    image.close();
   }
 
   // — Logo 2 —
@@ -525,7 +542,7 @@ export function drawPreview(
 
   // Logo 1
   if (logo) {
-    const positions = resolvePositions(ctx, cssW, cssH, previewSettings, base);
+    const positions = resolveWatermarkPositions(ctx, cssW, cssH, previewSettings, base);
     const toDraw = settings.smartPosition ? [positions[0]] : positions;
     for (const pos of toDraw) {
       const rects = calcLogoRects(

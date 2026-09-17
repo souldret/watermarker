@@ -45,6 +45,9 @@ export async function writeErrorsReport(
 ): Promise<void> {
   const fileHandle = await root.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(content);
-  await writable.close();
+  try {
+    await writable.write(content);
+  } finally {
+    await writable.close();
+  }
 }

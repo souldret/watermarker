@@ -3,6 +3,7 @@ import {
   blobForPreview,
   extFromMime,
   guessImageMime,
+  isAnimatedWebp,
   isImageFile,
   isLogoFile,
   outputMimeFor,
@@ -77,6 +78,31 @@ describe('blobForPreview', () => {
     const blob = blobForPreview(file);
     expect(blob.type).toBe('image/avif');
     expect(blob.size).toBe(3);
+  });
+});
+
+describe('isAnimatedWebp', () => {
+  it('.webp olmayan dosyada false döner', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'a.jpg', { type: 'image/jpeg' });
+    expect(await isAnimatedWebp(file)).toBe(false);
+  });
+
+  it('ANIM chunk içeren webp header → true', async () => {
+    const buf = new Uint8Array(60);
+    buf.set([82, 73, 70, 70], 0);
+    buf.set([87, 69, 66, 80], 8);
+    buf.set([65, 78, 73, 77], 30);
+    const file = new File([new Blob([buf])], 'anim.webp', { type: 'image/webp' });
+    expect(await isAnimatedWebp(file)).toBe(true);
+  });
+
+  it('statik webp header → false', async () => {
+    const buf = new Uint8Array(40);
+    buf.set([82, 73, 70, 70], 0);
+    buf.set([87, 69, 66, 80], 8);
+    buf.set([86, 80, 56, 32], 12);
+    const file = new File([buf], 'still.webp', { type: 'image/webp' });
+    expect(await isAnimatedWebp(file)).toBe(false);
   });
 });
 

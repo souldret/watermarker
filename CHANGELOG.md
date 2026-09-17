@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased] — 2026-09-17
+
+### Hata Düzeltmeleri
+- **Worker sapması:** Worker yolu akıllı konum (`resolveWatermarkPositions`) ve gerçek çıktı MIME'sini ana Canvas motoruyla aynı şekilde uygulıyor.
+- **Logo transferi:** Logo buffer'ı her görselde transfer edilerek ikinci işte logo kaybolmuyordu; worker'lar init'te logo yüklüyor, hazır olana kadar bekleniyor. Init başarısızsa iş başına yedek kopya gönderiliyor.
+- **İptal checkpoint:** İptalde checkpoint silinmiyor; kaldığı yerden devam çalışıyor.
+- **Uzun şerit:** Taşan Y değerleri alt kenara clamp edilmiyor — aynı logonun altta çoğalması durdu.
+- **Yazma hatası:** Klasöre hata raporu yazılırken stream `finally` ile kapanıyor.
+- **Animasyonlu WebP:** Header okuma jsdom/küçük dosya sapmasına dayanıklı; ANIM araması 512 byte.
+
+### Performans
+- Worker'lar logoyu bir kez decode ediyor; her işte PNG round-trip yok.
+- Önizleme overlay'i `getImageData` yerine canvas `drawImage` kopyası kullanıyor.
+- SmartPosition bölge skoru ara piksel kopyası üretmiyor.
+- Toplu önizleme ızgarası (`BatchPreviewGrid`) ana sayfaya eklendi ve tembel yükleniyor.
+- Logo object URL'leri logo değişince / sıfırlamada serbest bırakılıyor.
+
+---
+
 ## [Unreleased] — 2026-08-01
 
 ### Eklenen Özellikler

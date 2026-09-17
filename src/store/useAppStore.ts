@@ -24,6 +24,7 @@ import type {
 } from '@/lib/types';
 import { DEFAULT_PAGE_FILTER, DEFAULT_TEXT_WATERMARK } from '@/lib/types';
 import type { LogoSource } from '@/lib/watermark';
+import { revokeLogoBitmap } from '@/lib/watermark';
 import {
   createPreset,
   deletePreset,
@@ -163,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLogo: (file, source) => {
     const prev = get().logoUrl;
     if (prev) URL.revokeObjectURL(prev);
+    revokeLogoBitmap(get().logoSource);
     set({
       logoFile: file,
       logoSource: source,
@@ -173,6 +175,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLogo2: (file, source) => {
     const prev = get().logo2Url;
     if (prev) URL.revokeObjectURL(prev);
+    revokeLogoBitmap(get().logo2Source);
     set({
       logo2File: file,
       logo2Source: source,
@@ -369,10 +372,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   resetAll: () => {
-    const { logoUrl, logo2Url, previewImageUrl, ui } = get();
+    const { logoUrl, logo2Url, previewImageUrl, logoSource, logo2Source, ui } = get();
     if (logoUrl) URL.revokeObjectURL(logoUrl);
     if (logo2Url) URL.revokeObjectURL(logo2Url);
     if (previewImageUrl) URL.revokeObjectURL(previewImageUrl);
+    revokeLogoBitmap(logoSource);
+    revokeLogoBitmap(logo2Source);
     set({
       mode: 'single',
       logoFile: null,
