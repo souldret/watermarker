@@ -211,6 +211,9 @@ export default function SettingsSliders() {
           <option value="custom">Özel şablon</option>
         </select>
       </div>
+      {settings.namingPattern === 'original' && settings.outputTarget === 'folder' && (
+        <p className="text-[10px] leading-relaxed text-amber-400/80">{t('naming_collision_hint')}</p>
+      )}
 
       {settings.namingPattern === 'custom' && (
         <div className="space-y-1">

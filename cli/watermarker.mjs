@@ -3,31 +3,31 @@
  * Watermarker CLI (Node.js)
  * Örnek:
  *   node cli/watermarker.mjs --input ./series --logo ./logo.png --batch --out ./out
+ *   node cli/watermarker.mjs --input ./series --logo ./logo.png --preset ./ekip.json --batch
  *   node cli/watermarker.mjs --help
  *
- * Not: Canvas tabanlı tarayıcı motorundan bağımsız basit kopyalama/CLI iskeleti.
- * Gerçek basım için tarayıcı GUI veya Electron önerilir; CLI klasör taraması + rapor üretir
- * ve opsiyonel sharp yüklüyse watermark basar.
+ * Gerçek basım için isteğe bağlı sharp. Yoksa dosyalar kopyalanır.
+ * --preset GUI'den dışa aktarılan .watermarker.json / preset JSON okur.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 function printHelp() {
   console.log(`Watermarker CLI
 
 Usage:
-  node cli/watermarker.mjs --input <dir> --logo <file> [--batch] [--out <dir>]
+  node cli/watermarker.mjs --input <dir> --logo <file> [--batch] [--out <dir>] [--preset <json>]
 
 Options:
   --input, -i   Kaynak klasör (bölüm veya seri)
   --logo, -l    Logo dosyası (png)
   --batch, -b   Seri modu (alt klasörler = bölüm)
   --out, -o     Çıktı klasörü (varsayılan: <input>_wm)
-  --size        Logo genişlik yüzdesi (varsayılan 12)
-  --opacity     0-1 (varsayılan 0.55)
-  --pos         tl|tc|tr|ml|mc|mr|bl|bc|br (varsayılan br)
+  --preset, -p  Preset JSON (settings.sizePercent, opacity, positions[0])
+  --size        Logo genişlik yüzdesi (varsayılan 12 / preset)
+  --opacity     0-1 (varsayılan 0.55 / preset)
+  --pos         tl|tc|tr|ml|mc|mr|bl|bc|br (varsayılan br / preset)
   --help, -h    Yardım
 `);
 }
@@ -38,9 +38,11 @@ function parseArgs(argv) {
     logo: null,
     batch: false,
     out: null,
-    size: 12,
-    opacity: 0.55,
-    pos: 'br',
+    preset: null,
+    size: null,
+    opacity: null,
+    pos: null,
+    help: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -56,6 +58,9 @@ function parseArgs(argv) {
     else if ((a === '--out' || a === '-o') && n) {
       args.out = n;
       i++;
+    } else if ((a === '--preset' || a === '-p') && n) {
+      args.preset = n;
+      i++;
     } else if (a === '--size' && n) {
       args.size = Number(n);
       i++;
@@ -68,6 +73,18 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function loadPresetFile(filePath) {
+  const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const first = Array.isArray(raw.presets) ? raw.presets[0] : raw;
+  const settings = first?.settings || raw.settings || raw;
+  const pos = Array.isArray(settings.positions) ? settings.positions[0] : settings.pos;
+  return {
+    size: Number(settings.sizePercent) || 12,
+    opacity: Number(settings.opacity) || 0.55,
+    pos: typeof pos === 'string' ? pos : 'br',
+  };
 }
 
 const IMAGE_RE = /\.(jpe?g|png|webp|avif|bmp|gif)$/i;
@@ -143,6 +160,23 @@ async function main() {
     console.error('Geçersiz --logo dosyası');
     process.exit(1);
   }
+
+  let preset = { size: 12, opacity: 0.55, pos: 'br' };
+  if (args.preset) {
+    const presetPath = path.resolve(args.preset);
+    if (!fs.existsSync(presetPath)) {
+      console.error('Geçersiz --preset dosyası');
+      process.exit(1);
+    }
+    preset = { ...preset, ...loadPresetFile(presetPath) };
+    console.log(`Preset: ${presetPath} (size=${preset.size} opacity=${preset.opacity} pos=${preset.pos})`);
+  }
+  const opts = {
+    size: args.size ?? preset.size,
+    opacity: args.opacity ?? preset.opacity,
+    pos: args.pos ?? preset.pos,
+  };
+
   const outRoot = path.resolve(args.out || `${input}_wm`);
   fs.mkdirSync(outRoot, { recursive: true });
 
@@ -163,7 +197,7 @@ async function main() {
       const base = path.basename(img);
       const dest = path.join(outDir, base);
       try {
-        const res = await trySharpComposite(img, logo, dest, args);
+        const res = await trySharpComposite(img, logo, dest, opts);
         if (res.ok) ok += 1;
         else {
           fs.copyFileSync(img, dest);

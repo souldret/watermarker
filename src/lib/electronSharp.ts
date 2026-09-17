@@ -2,13 +2,8 @@
  * electronSharp.ts
  * Renderer tarafı Electron sharp köprüsü.
  *
- * Electron ortamında (window.electronSharp mevcutsa) IPC üzerinden
- * main process'teki sharp'a watermark işlemi delege edilir.
- * Web (tarayıcı) veya Electron'da sharp yoksa null döner → Canvas 2D fallback.
- *
- * Kullanım:
- *   const result = await applyWatermarkViaSharp({ ... });
- *   if (!result) { // Canvas 2D yoluna git }
+ * Basit ızgara konumları (customXY / 2. logo / metin / long-strip yok) için
+ * native sharp kullanılır. Aksi halde null → Canvas 2D / worker fallback.
  */
 
 import type { WatermarkSettings } from './types';
@@ -21,6 +16,7 @@ declare global {
     electronSharp?: {
       available: () => Promise<boolean>;
       applyWatermark: (opts: SharpIpcOpts) => Promise<SharpIpcResult>;
+      imageSize?: (buf: ArrayBuffer) => Promise<{ width: number; height: number } | { error: string }>;
     };
   }
 }
@@ -44,8 +40,8 @@ interface SharpIpcResult {
   error?: string;
 }
 
-/** Electron + sharp var mı? Sonucu önbelleğe al */
 let _sharpAvailableCache: boolean | null = null;
+const logoBufferCache = new WeakMap<ImageBitmap | HTMLImageElement, ArrayBuffer>();
 
 export async function isElectronSharpAvailable(): Promise<boolean> {
   if (_sharpAvailableCache !== null) return _sharpAvailableCache;
@@ -61,15 +57,24 @@ export async function isElectronSharpAvailable(): Promise<boolean> {
   return _sharpAvailableCache;
 }
 
-/** Cache'i sıfırla (test veya ayar değişikliğinde) */
 export function resetSharpAvailableCache(): void {
   _sharpAvailableCache = null;
 }
 
-/**
- * WatermarkPosition'dan sharp gravity string'i üretir.
- * 'br' → 'southeast', 'tl' → 'northwest', vb.
- */
+export function canUseElectronSharp(settings: WatermarkSettings, hasLogo2: boolean): boolean {
+  if (settings.logo1CustomXY) return false;
+  if (settings.logo1CustomXYOverrides && Object.keys(settings.logo1CustomXYOverrides).length > 0) {
+    return false;
+  }
+  if (settings.textWatermark?.enabled) return false;
+  if (hasLogo2 && settings.logo2?.enabled) return false;
+  if (settings.longStripMode?.enabled) return false;
+  if (settings.smartPosition) return false;
+  if ((settings.positions?.length ?? 0) !== 1) return false;
+  if (settings.rotation) return false;
+  return true;
+}
+
 function positionToGravity(pos: string): string {
   const map: Record<string, string> = {
     tl: 'northwest', tc: 'north', tr: 'northeast',
@@ -79,76 +84,95 @@ function positionToGravity(pos: string): string {
   return map[pos] || 'southeast';
 }
 
-/**
- * Sharp ile watermark uygula (Electron ana process üzerinden IPC).
- *
- * @returns Blob veya null (sharp yok / hata → Canvas 2D fallback için null)
- */
-export async function applyWatermarkViaSharp(
-  imageFile: File,
-  logo: LogoSource,
-  settings: WatermarkSettings,
-): Promise<{ blob: Blob; mime: string } | null> {
-  if (!window.electronSharp) return null;
-
+async function logoToBuffer(logo: LogoSource): Promise<ArrayBuffer | null> {
+  const cached = logoBufferCache.get(logo.bitmap);
+  if (cached) return cached;
   try {
-    const imageBuffer = await imageFile.arrayBuffer();
-
-    // Logo bitmap'i buffer'a çevir (OffscreenCanvas round-trip)
-    let logoBuffer: ArrayBuffer | null = null;
     if (typeof OffscreenCanvas !== 'undefined') {
       const oc = new OffscreenCanvas(logo.width, logo.height);
-      const octx = oc.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      const octx = oc.getContext('2d') as OffscreenCanvasRenderingContext2D | null;
       if (octx) {
         octx.drawImage(logo.bitmap as CanvasImageSource, 0, 0);
         const blob = await oc.convertToBlob({ type: 'image/png' });
-        logoBuffer = await blob.arrayBuffer();
+        const buf = await blob.arrayBuffer();
+        logoBufferCache.set(logo.bitmap, buf);
+        return buf;
       }
     }
-    if (!logoBuffer && typeof document !== 'undefined') {
+    if (typeof document !== 'undefined') {
       const c = document.createElement('canvas');
       c.width = logo.width;
       c.height = logo.height;
       const ctx = c.getContext('2d');
       if (ctx) {
         ctx.drawImage(logo.bitmap as CanvasImageSource, 0, 0);
-        logoBuffer = await new Promise<ArrayBuffer>((res, rej) =>
+        const buf = await new Promise<ArrayBuffer>((res, rej) =>
           c.toBlob(
             (b) => (b ? b.arrayBuffer().then(res) : rej(new Error('toBlob failed'))),
             'image/png',
           ),
         );
+        logoBufferCache.set(logo.bitmap, buf);
+        return buf;
       }
     }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function readImageWidth(imageBuffer: ArrayBuffer, fileName: string): Promise<number | null> {
+  if (window.electronSharp?.imageSize) {
+    try {
+      const meta = await window.electronSharp.imageSize(imageBuffer.slice(0));
+      if ('width' in meta && meta.width > 0) return meta.width;
+    } catch {
+      // fallback
+    }
+  }
+  try {
+    const blob = new Blob([imageBuffer]);
+    const bmp = await createImageBitmap(blob);
+    const w = bmp.width;
+    bmp.close();
+    return w;
+  } catch {
+    void fileName;
+    return null;
+  }
+}
+
+/**
+ * Sharp ile watermark uygula.
+ * @returns Blob veya null (uygunsuz / hata → Canvas 2D fallback)
+ */
+export async function applyWatermarkViaSharp(
+  imageFile: File,
+  logo: LogoSource,
+  settings: WatermarkSettings,
+): Promise<{ blob: Blob; mime: string; ext?: string } | null> {
+  if (!window.electronSharp) return null;
+  if (!canUseElectronSharp(settings, false)) return null;
+
+  try {
+    const imageBuffer = await imageFile.arrayBuffer();
+    const logoBuffer = await logoToBuffer(logo);
     if (!logoBuffer) return null;
 
-    // Logo boyutunu hesapla (ana thread'de)
-    // Görsel boyutunu bilmek için imageFile'ı decode etmemiz gerekirdi.
-    // Bunun yerine en son previewImageUrl boyutunu kullanamayız — 
-    // Basit yaklaşım: görsel boyutunu ArrayBuffer header'dan okuyamayız,
-    // bu yüzden logo boyutunu yüzde tabanlı hesaplamak için
-    // bir tahmini görsel genişliği kullanırız (yüksek kalite için).
-    // NOT: Sharp'a logoWidth/logoHeight calcLogoSize'dan hesaplanmış değerler geçilir.
-    // Gerçek görsel boyutu işlemi main process içinde sharp ile alınır (metadata).
-    // Bu yüzden burada sadece % veya px ayarından logo genişliğini tahmin ediyoruz.
-    // main.cjs'deki applyWatermarkSharp logoyu resize eder, gravity pozisyonu uygular.
+    const imageW = await readImageWidth(imageBuffer, imageFile.name);
+    if (!imageW) return null;
 
-    // Varsayılan görsel genişliği tahmini (sharp kendi boyutlandırır)
-    const estimatedImageW = settings.sizeMode === 'px' ? 1000 : 1000;
-    const { w: logoW, h: logoH } = calcLogoSize(estimatedImageW, logo.width, logo.height, settings);
-
+    const { w: logoW, h: logoH } = calcLogoSize(imageW, logo.width, logo.height, settings);
     const pos = settings.positions?.[0] || 'br';
-    const gravity = positionToGravity(pos);
-
-    // MIME
-    const { mime: outputMime } = outputMimeFor(settings.outputFormat, imageFile.name);
+    const { mime: outputMime, ext } = outputMimeFor(settings.outputFormat, imageFile.name);
 
     const result = await window.electronSharp.applyWatermark({
       imageBuffer,
-      logoBuffer,
+      logoBuffer: logoBuffer.slice(0),
       logoWidth: Math.max(1, Math.round(logoW)),
       logoHeight: Math.max(1, Math.round(logoH)),
-      gravity,
+      gravity: positionToGravity(pos),
       offsetX: Math.max(0, settings.marginPx),
       offsetY: Math.max(0, settings.marginPx),
       opacity: settings.opacity,
@@ -157,10 +181,8 @@ export async function applyWatermarkViaSharp(
     });
 
     if (result.error || !result.buffer) return null;
-
     const mime = result.mime || outputMime;
-    const blob = new Blob([result.buffer], { type: mime });
-    return { blob, mime };
+    return { blob: new Blob([result.buffer], { type: mime }), mime, ext };
   } catch {
     return null;
   }

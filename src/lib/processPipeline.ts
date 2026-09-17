@@ -9,11 +9,12 @@ import type {
   WatermarkSettings,
 } from './types';
 import type { LogoSource } from './watermark';
-import { applyWatermark } from './watermark';
+import { applyWatermark, settingsForImage } from './watermark';
 import { applyFilterToChapters, flattenJobs } from './pageFilter';
 import { buildOutputFileName } from './naming';
 import { pickOutputDirectory, writeBlobToTree } from './writeFolder';
 import { extFromMime, guessImageMime, isAnimatedWebp, outputMimeFor } from './imageFormats';
+import { applyWatermarkViaSharp, canUseElectronSharp, isElectronSharpAvailable } from './electronSharp';
 import type {
   WatermarkWorkerInit,
   WatermarkWorkerRequest,
@@ -360,9 +361,23 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
   let logo2Buffer: ArrayBuffer | null = null;
   let useWorker = false;
   let logosPreloaded = false;
+  let sharpReady = false;
+
+  try {
+    sharpReady =
+      Boolean(opts.logo) &&
+      (await isElectronSharpAvailable()) &&
+      canUseElectronSharp(opts.settings, Boolean(opts.logo2 && opts.settings.logo2?.enabled));
+    if (sharpReady) {
+      opts.onLog('info', 'Electron sharp: native watermark motoru.');
+    }
+  } catch {
+    sharpReady = false;
+  }
 
   try {
     if (
+      !sharpReady &&
       typeof Worker !== 'undefined' &&
       typeof OffscreenCanvas !== 'undefined' &&
       typeof createImageBitmap !== 'undefined'
@@ -460,8 +475,20 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
 
       result.bytesIn += job.image.file.size;
 
-      const { mime, ext } = mimeFor(opts.settings.outputFormat, job.image.name);
-      const quality = mime === 'image/png' ? undefined : Math.min(1, Math.max(0.1, opts.settings.outputQuality));
+      const jobSettings = settingsForImage(opts.settings, job.image.path);
+      const { mime, ext } = mimeFor(jobSettings.outputFormat, job.image.name);
+      const quality = mime === 'image/png' ? undefined : Math.min(1, Math.max(0.1, jobSettings.outputQuality));
+
+      if (
+        sharpReady &&
+        opts.logo &&
+        canUseElectronSharp(jobSettings, Boolean(opts.logo2 && jobSettings.logo2?.enabled))
+      ) {
+        const sharpResult = await applyWatermarkViaSharp(job.image.file, opts.logo, jobSettings);
+        if (sharpResult) {
+          return { blob: sharpResult.blob, ext: sharpResult.ext || ext };
+        }
+      }
 
       if (useWorker && pool) {
         const imageBuffer = await job.image.file.arrayBuffer();
@@ -477,7 +504,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
             : (opts.settings.logo2?.enabled && logo2Buffer ? cloneArrayBuffer(logo2Buffer) : null),
           logo2Width: opts.logo2?.width ?? 0,
           logo2Height: opts.logo2?.height ?? 0,
-          settings: opts.settings,
+          settings: jobSettings,
           mime,
           quality,
         };
@@ -490,7 +517,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
       }
 
       const { blob, ext: blobExt } = await applyWatermark(
-        job.image.file, opts.logo, opts.logo2, opts.settings,
+        job.image.file, opts.logo, opts.logo2, jobSettings, job.image.path,
       );
       return { blob, ext: blobExt };
     }

@@ -21,7 +21,6 @@ import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
 
 const Wizard = lazy(() => import('@/components/Wizard'));
-const BatchPreviewGrid = lazy(() => import('@/components/BatchPreviewGrid'));
 
 export default function Home() {
   const { t } = useI18n();
@@ -76,9 +75,6 @@ export default function Home() {
             <PreviewCanvas />
             <FileTree />
           </div>
-          <Suspense fallback={null}>
-            <BatchPreviewGrid />
-          </Suspense>
           <SummaryCard />
           <ProgressPanel />
         </div>

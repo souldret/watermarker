@@ -14,6 +14,7 @@ import {
   calcLogo2Rect,
   drawTextWatermark,
   resolveWatermarkPositions,
+  settingsForImage,
 } from './watermark';
 
 export interface WatermarkWorkerInit {
@@ -129,11 +130,12 @@ async function processJob(req: WatermarkWorkerRequest): Promise<{ buffer: ArrayB
     ctx.drawImage(imageBitmap, 0, 0);
 
     const ctx2d = ctx as unknown as CanvasRenderingContext2D;
+    const settings = settingsForImage(req.settings);
     const logo1Bitmap = await ensureLogo(req.logo1Buffer, 1);
     if (logo1Bitmap) {
       const logo1: LogoSource = { width: req.logo1Width, height: req.logo1Height, bitmap: logo1Bitmap };
-      const positions = resolveWatermarkPositions(ctx2d, width, height, req.settings);
-      const toDraw = req.settings.smartPosition ? [positions[0]] : positions;
+      const positions = resolveWatermarkPositions(ctx2d, width, height, settings);
+      const toDraw = settings.smartPosition ? [positions[0]] : positions;
 
       for (const pos of toDraw) {
         const rects = calcLogoRects(
@@ -142,11 +144,11 @@ async function processJob(req: WatermarkWorkerRequest): Promise<{ buffer: ArrayB
           logo1.width,
           logo1.height,
           pos,
-          req.settings,
-          req.settings.logo1CustomXY,
+          settings,
+          settings.logo1CustomXY,
         );
         for (const rect of rects) {
-          drawLogoAtOffscreen(ctx, logo1Bitmap, rect, req.settings.opacity, req.settings.rotation);
+          drawLogoAtOffscreen(ctx, logo1Bitmap, rect, settings.opacity, settings.rotation);
         }
       }
     }
@@ -154,9 +156,9 @@ async function processJob(req: WatermarkWorkerRequest): Promise<{ buffer: ArrayB
     imageBitmap.close();
     imageBitmap = null;
 
-    const logo2Bitmap = req.settings.logo2?.enabled ? await ensureLogo(req.logo2Buffer, 2) : null;
-    if (logo2Bitmap && req.settings.logo2?.enabled) {
-      const l2 = req.settings.logo2;
+    const logo2Bitmap = settings.logo2?.enabled ? await ensureLogo(req.logo2Buffer, 2) : null;
+    if (logo2Bitmap && settings.logo2?.enabled) {
+      const l2 = settings.logo2;
       const positions: WatermarkPosition[] = l2.positions.length > 0 ? l2.positions : ['bl'];
 
       for (const pos of positions) {
@@ -167,15 +169,15 @@ async function processJob(req: WatermarkWorkerRequest): Promise<{ buffer: ArrayB
           req.logo2Height,
           pos,
           l2,
-          req.settings.marginPx,
-          req.settings.customXYMode ?? 'edge-anchor',
+          settings.marginPx,
+          settings.customXYMode ?? 'edge-anchor',
         );
         drawLogoAtOffscreen(ctx, logo2Bitmap, rect, l2.opacity, l2.rotation);
       }
     }
 
-    if (req.settings.textWatermark?.enabled) {
-      drawTextWatermark(ctx2d, width, height, req.settings.textWatermark, 1);
+    if (settings.textWatermark?.enabled) {
+      drawTextWatermark(ctx2d, width, height, settings.textWatermark, 1);
     }
 
     let blob: Blob;

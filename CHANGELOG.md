@@ -2,6 +2,19 @@
 
 ## [Unreleased] — 2026-09-17
 
+### UI
+- Toplu önizleme ızgarası kaldırıldı (CPU yükü / Trae inspector uyarısı).
+- Gelişmiş panel başlığından yanıltıcı “AI” etiketi çıkarıldı.
+- Konum modu metinleri i18n’e alındı. “Sadece bu sayfa” pin’i eklendi.
+
+### Özellikler
+- Sayfa bazlı Logo 1 konum override pipeline, worker ve önizlemede aktif.
+- Electron sharp basit ızgara basımında gerçek görsel genişliğiyle bağlandı.
+- Checkpoint `sessionStorage`’da tutuluyor.
+- ZIP resume uyarısı; büyük dosya onayı; klasöre yaz + orijinal ad çakışma ipucu.
+- CLI `--preset` JSON okuyor (size / opacity / pos).
+- GIF varsayılanı `skip`. Uzun şerit serbest konumla birlikte Y tekrarı yapıyor.
+
 ### Hata Düzeltmeleri
 - **Worker sapması:** Worker yolu akıllı konum (`resolveWatermarkPositions`) ve gerçek çıktı MIME'sini ana Canvas motoruyla aynı şekilde uygulıyor.
 - **Logo transferi:** Logo buffer'ı her görselde transfer edilerek ikinci işte logo kaybolmuyordu; worker'lar init'te logo yüklüyor, hazır olana kadar bekleniyor. Init başarısızsa iş başına yedek kopya gönderiliyor.
@@ -14,7 +27,7 @@
 - Worker'lar logoyu bir kez decode ediyor; her işte PNG round-trip yok.
 - Önizleme overlay'i `getImageData` yerine canvas `drawImage` kopyası kullanıyor.
 - SmartPosition bölge skoru ara piksel kopyası üretmiyor.
-- Toplu önizleme ızgarası (`BatchPreviewGrid`) ana sayfaya eklendi ve tembel yükleniyor.
+- Toplu önizleme ızgarası kaldırıldı (CPU yükü).
 - Logo object URL'leri logo değişince / sıfırlamada serbest bırakılıyor.
 
 ---

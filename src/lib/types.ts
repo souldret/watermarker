@@ -107,11 +107,10 @@ export interface WatermarkSettings {
    */
   customXYMode: CustomXYMode;
   /**
-   * Per-image override map (mimari hazırlık — gelecek iterasyon).
-   * key: imagePath, value: CustomXY override.
-   * processPipeline bu map'te kayıt varsa onu, yoksa global logo1CustomXY'yi kullanır.
+   * Sayfa bazlı Logo 1 konum override.
+   * key: imagePath — kayıt varsa global logo1CustomXY yerine kullanılır.
    */
-  logo1CustomXYOverrides?: Record<string, CustomXY>;
+  logo1CustomXYOverrides: Record<string, CustomXY>;
   sizeMode: SizeMode;
   sizePercent: number;
   sizePx: number;
@@ -257,6 +256,7 @@ export const DEFAULT_SETTINGS: WatermarkSettings = {
   positions: ['br'],
   logo1CustomXY: null,
   customXYMode: 'edge-anchor',
+  logo1CustomXYOverrides: {},
   sizeMode: 'percent',
   sizePercent: 12,
   sizePx: 180,
@@ -269,7 +269,7 @@ export const DEFAULT_SETTINGS: WatermarkSettings = {
   namingCustom: '{chapter}_{index}_{name}',
   outputTarget: 'zip',
   smartPosition: false,
-  gifPolicy: 'first_frame',
+  gifPolicy: 'skip',
   textWatermark: { ...DEFAULT_TEXT_WATERMARK },
   largeFileMb: 25,
   logo2: { ...DEFAULT_LOGO2 },

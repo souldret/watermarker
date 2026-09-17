@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { calcLogoRect, calcLogoSize, calcLogo2Rect, resolveCustomXY, buildEdgeAnchorXY } from '../watermark';
+import { calcLogoRect, calcLogoSize, calcLogo2Rect, resolveCustomXY, buildEdgeAnchorXY, settingsForImage } from '../watermark';
 import { pickSmartPosition } from '../smartPosition';
 import { makeMockCanvasFactory } from './helpers/mockCanvasFactory';
 import { filterChapterImages } from '../pageFilter';
 import { buildOutputFileName } from '../naming';
 import type { ImageFile, Logo2Settings, PageFilter } from '../types';
+import { DEFAULT_SETTINGS } from '../types';
 
 describe('calcLogoSize', () => {
   it('percent mode scales by image width', () => {
@@ -313,5 +314,29 @@ describe('calcLogo2Rect edge cases', () => {
     const r2 = calcLogo2Rect(1000, 5000, 100, 50, 'br', { ...logo2Base, customXY: anchorXY }, 20, 'edge-anchor');
     expect(1000 - (r1.x + r1.w)).toBeCloseTo(1000 - (r2.x + r2.w), 0);
     expect(800 - (r1.y + r1.h)).toBeCloseTo(5000 - (r2.y + r2.h), 0);
+  });
+});
+
+describe('settingsForImage', () => {
+  it('override varsa sayfa konumunu kullanır', () => {
+    const override = { x: 0.1, y: 0.2, mode: 'ratio' as const };
+    const s = settingsForImage(
+      {
+        ...DEFAULT_SETTINGS,
+        logo1CustomXY: { x: 0.9, y: 0.9, mode: 'ratio' },
+        logo1CustomXYOverrides: { 'ch/001.jpg': override },
+      },
+      'ch/001.jpg',
+    );
+    expect(s.logo1CustomXY).toEqual(override);
+  });
+
+  it('override yoksa global konumu korur', () => {
+    const global = { x: 0.9, y: 0.9, mode: 'ratio' as const };
+    const s = settingsForImage(
+      { ...DEFAULT_SETTINGS, logo1CustomXY: global, logo1CustomXYOverrides: {} },
+      'ch/002.jpg',
+    );
+    expect(s.logo1CustomXY).toEqual(global);
   });
 });

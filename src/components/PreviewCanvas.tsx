@@ -55,11 +55,12 @@ function PreviewCanvas() {
         settings,
         boxW,
         boxH,
+        previewPath,
       );
     } catch {
       // Önizleme hatası UI'yi düşürmesin
     }
-  }, [logoSource, logo2Source, settings, previewImageUrl]);
+  }, [logoSource, logo2Source, settings, previewImageUrl, previewPath]);
 
   // Debounce wrapper — slider sürükleme gibi hızlı değişimlerde gereksiz yeniden çizimi önler
   const paint = useCallback(() => {

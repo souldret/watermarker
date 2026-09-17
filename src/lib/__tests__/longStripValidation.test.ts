@@ -90,27 +90,27 @@ describe('ADIM 8 — Uzunluk bazlı rect sayısı', () => {
 
 // ─── Adım 9: customXY ile tekrar yok ────────────────────────────────────────
 
-describe('ADIM 9 — customXY (serbest konum) seciliyken tekrar DEVREDE DEGIL', () => {
-  it('ratio mod customXY + uzun serit → tek rect', () => {
+describe('ADIM 9 — customXY ile uzun serit tekrari', () => {
+  it('ratio mod customXY + uzun serit → tek konumdan Y tekrari', () => {
     const rects = calcLogoRects(800, 12000, 100, 50, 'br', lsmSettings, {
       x: 0.5,
-      y: 0.5,
+      y: 0.05,
       mode: 'ratio',
     });
-    expect(rects).toHaveLength(1);
+    expect(rects.length).toBeGreaterThan(1);
   });
 
-  it('edge-anchor mod customXY + uzun serit → tek rect', () => {
+  it('edge-anchor mod customXY + uzun serit → tekrar AKTIF', () => {
     const rects = calcLogoRects(800, 12000, 100, 50, 'br', lsmSettings, {
       x: 0.85,
-      y: 0.92,
+      y: 0.02,
       mode: 'edge-anchor',
       anchorX: 'right',
-      anchorY: 'bottom',
+      anchorY: 'top',
       offsetXPx: 24,
       offsetYPx: 24,
     });
-    expect(rects).toHaveLength(1);
+    expect(rects.length).toBeGreaterThan(1);
   });
 
   it('customXY null ise uzun serit tekrar AKTIF', () => {

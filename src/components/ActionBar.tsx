@@ -54,6 +54,20 @@ export default function ActionBar() {
       return;
     }
 
+    const largeBytes = Math.max(1, currentSettings.largeFileMb || 25) * 1024 * 1024;
+    const largeCount = currentChapters.reduce(
+      (n, ch) => n + ch.images.filter((img) => img.file.size >= largeBytes).length,
+      0,
+    );
+    if (largeCount > 0 && typeof window !== 'undefined' && !window.confirm(t('large_file_confirm'))) {
+      addLog('warn', t('large_file_confirm'));
+      return;
+    }
+
+    if (resume && currentSettings.outputTarget === 'zip') {
+      addLog('warn', t('zip_resume_warn'));
+    }
+
     resetCancel();
     setProcessing(true);
     if (!resume) {

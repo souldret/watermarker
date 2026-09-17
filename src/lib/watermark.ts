@@ -206,9 +206,6 @@ export function calcLogoRects(
 ): Rect[] {
   const baseRect = calcLogoRect(imageW, imageH, logoW, logoH, position, settings, customXY);
 
-  // Serbest konum seçiliyken tekrar yapma
-  if (customXY) return [baseRect];
-
   const lsm = settings.longStripMode;
   if (!lsm || !lsm.enabled) return [baseRect];
 
@@ -347,6 +344,24 @@ export function resolveWatermarkPositions(
   return [smart, ...base.filter((p) => p !== smart)];
 }
 
+/** Logo 1 serbest konumu: sayfa override varsa onu, yoksa global'i kullan. */
+export function resolveLogo1CustomXY(
+  settings: Pick<WatermarkSettings, 'logo1CustomXY' | 'logo1CustomXYOverrides'>,
+  imagePath?: string | null,
+): CustomXY | null {
+  if (imagePath && settings.logo1CustomXYOverrides?.[imagePath]) {
+    return settings.logo1CustomXYOverrides[imagePath];
+  }
+  return settings.logo1CustomXY;
+}
+
+/** Pipeline / worker için sayfa bazlı ayar kopyası. */
+export function settingsForImage(settings: WatermarkSettings, imagePath?: string | null): WatermarkSettings {
+  const xy = resolveLogo1CustomXY(settings, imagePath);
+  if (xy === settings.logo1CustomXY) return settings;
+  return { ...settings, logo1CustomXY: xy };
+}
+
 export function revokeLogoBitmap(source: LogoSource | null): void {
   const bitmap = source?.bitmap;
   if (bitmap && 'src' in bitmap && typeof bitmap.src === 'string' && bitmap.src.startsWith('blob:')) {
@@ -376,7 +391,9 @@ export async function applyWatermark(
   logo: LogoSource | null,
   logo2: LogoSource | null,
   settings: WatermarkSettings,
+  imagePath?: string | null,
 ): Promise<{ blob: Blob; mime: string; ext: string }> {
+  settings = settingsForImage(settings, imagePath ?? imageFile.name);
   const image = await loadImageFromFile(imageFile);
   const size = getSourceSize(image);
   if (size.width < 1 || size.height < 1) {
@@ -478,7 +495,9 @@ export function drawPreview(
   settings: WatermarkSettings,
   maxW = 220,
   maxH = 280,
+  imagePath?: string | null,
 ): void {
+  settings = settingsForImage(settings, imagePath);
   if (baseW < 1 || baseH < 1) return;
 
   // Sadece genişliğe göre scale hesapla (yükseklik kısıtı yok → uzun görseller bozulmaz)

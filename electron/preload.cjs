@@ -16,4 +16,5 @@ contextBridge.exposeInMainWorld('electronSharp', {
    * @returns { buffer: Uint8Array, mime: string } | { error: string }
    */
   applyWatermark: (opts) => ipcRenderer.invoke('sharp:applyWatermark', opts),
+  imageSize: (buf) => ipcRenderer.invoke('sharp:imageSize', buf),
 });

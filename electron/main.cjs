@@ -101,6 +101,17 @@ function registerIpcHandlers() {
     tryLoadSharp();
     return applyWatermarkSharp(opts);
   });
+
+  ipcMain.handle('sharp:imageSize', async (_event, buf) => {
+    tryLoadSharp();
+    if (!sharpLib) return { error: 'sharp yok' };
+    try {
+      const meta = await sharpLib(Buffer.from(buf)).metadata();
+      return { width: meta.width || 0, height: meta.height || 0 };
+    } catch (err) {
+      return { error: err.message || 'metadata hatası' };
+    }
+  });
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────

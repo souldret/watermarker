@@ -34,6 +34,7 @@ import {
   savePresets,
 } from '@/lib/presets';
 import { applyThemeToDom, loadUiPrefs, saveUiPrefs } from '@/lib/uiPrefs';
+import { loadCheckpoint, saveCheckpoint } from '@/lib/checkpoint';
 import { blobForPreview } from '@/lib/imageFormats';
 
 interface AppState {
@@ -67,7 +68,8 @@ interface AppState {
   patchSettings: (partial: Partial<WatermarkSettings>) => void;
   patchTextWatermark: (partial: Partial<TextWatermark>) => void;
   patchLogo2Settings: (partial: Partial<Logo2Settings>) => void;
-  setLogo1CustomXY: (xy: CustomXY | null) => void;
+  setLogo1CustomXY: (xy: CustomXY | null, scope?: 'global' | 'page') => void;
+  clearLogo1PageOverride: (path?: string | null) => void;
   togglePosition: (position: WatermarkPosition) => void;
   setPositions: (positions: WatermarkPosition[]) => void;
   setSizeMode: (mode: SizeMode) => void;
@@ -146,10 +148,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   previewImageUrl: null,
   previewPath: null,
   presets: loadPresets(),
-  checkpoint: null,
+  checkpoint: loadCheckpoint(),
   ui: initialUi,
 
-  setMode: (mode) =>
+  setMode: (mode) => {
+    saveCheckpoint(null);
     set({
       mode,
       chapters: [],
@@ -159,7 +162,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       previewImageUrl: null,
       previewPath: null,
       checkpoint: null,
-    }),
+    });
+  },
 
   setLogo: (file, source) => {
     const prev = get().logoUrl;
@@ -191,10 +195,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     })),
 
-  setLogo1CustomXY: (xy) =>
-    set((s) => ({
-      settings: { ...s.settings, logo1CustomXY: xy },
-    })),
+  setLogo1CustomXY: (xy, scope = 'global') =>
+    set((s) => {
+      if (scope === 'page') {
+        if (!s.previewPath) return s;
+        const next = { ...(s.settings.logo1CustomXYOverrides ?? {}) };
+        if (xy) next[s.previewPath] = xy;
+        else delete next[s.previewPath];
+        return { settings: { ...s.settings, logo1CustomXYOverrides: next } };
+      }
+      return { settings: { ...s.settings, logo1CustomXY: xy } };
+    }),
+
+  clearLogo1PageOverride: (path) =>
+    set((s) => {
+      const key = path ?? s.previewPath;
+      if (!key || !s.settings.logo1CustomXYOverrides?.[key]) return s;
+      const next = { ...s.settings.logo1CustomXYOverrides };
+      delete next[key];
+      return { settings: { ...s.settings, logo1CustomXYOverrides: next } };
+    }),
 
   patchSettings: (partial) =>
     set((s) => ({
@@ -267,6 +287,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const prev = get().previewImageUrl;
     if (prev) URL.revokeObjectURL(prev);
     const first = chapters[0]?.images[0] ?? null;
+    saveCheckpoint(null);
     set({
       chapters,
       sourceLabel,
@@ -309,8 +330,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   clearLogs: () => set({ logs: [] }),
-  setCheckpoint: (checkpoint) => set({ checkpoint }),
-  clearCheckpoint: () => set({ checkpoint: null }),
+  setCheckpoint: (checkpoint) => {
+    saveCheckpoint(checkpoint);
+    set({ checkpoint });
+  },
+  clearCheckpoint: () => {
+    saveCheckpoint(null);
+    set({ checkpoint: null });
+  },
   reloadPresets: () => set({ presets: loadPresets() }),
   setPresets: (presets) => {
     savePresets(presets);
@@ -378,6 +405,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (previewImageUrl) URL.revokeObjectURL(previewImageUrl);
     revokeLogoBitmap(logoSource);
     revokeLogoBitmap(logo2Source);
+    saveCheckpoint(null);
     set({
       mode: 'single',
       logoFile: null,

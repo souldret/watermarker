@@ -8,9 +8,11 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
+  canUseElectronSharp,
   isElectronSharpAvailable,
   resetSharpAvailableCache,
 } from '../electronSharp';
+import { DEFAULT_SETTINGS } from '../types';
 
 // window.electronSharp mock'u
 function mockSharpAvailable(available: boolean) {
@@ -88,5 +90,21 @@ describe('ADIM 23 — sharp yok: Canvas 2D fallback', () => {
     mockSharpAvailable(false); // Şimdi false
     const result = await isElectronSharpAvailable();
     expect(result).toBe(false);
+  });
+});
+
+describe('canUseElectronSharp', () => {
+  it('basit ızgara + tek logo → true', () => {
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, longStripMode: { ...DEFAULT_SETTINGS.longStripMode, enabled: false } }, false)).toBe(true);
+  });
+
+  it('customXY veya 2. logo veya metin → false', () => {
+    const base = { ...DEFAULT_SETTINGS, longStripMode: { ...DEFAULT_SETTINGS.longStripMode, enabled: false } };
+    expect(canUseElectronSharp({ ...base, logo1CustomXY: { x: 0.5, y: 0.5 } }, false)).toBe(false);
+    expect(canUseElectronSharp({ ...base, logo2: { ...base.logo2, enabled: true } }, true)).toBe(false);
+    expect(canUseElectronSharp({
+      ...base,
+      textWatermark: { ...base.textWatermark, enabled: true },
+    }, false)).toBe(false);
   });
 });

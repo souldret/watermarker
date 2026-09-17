@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   // Electron / file:// için göreli asset yolları
   base: './',
   build: {
@@ -25,11 +25,7 @@ export default defineConfig(({ command }) => ({
     include: ['react', 'react-dom', 'zustand', 'lucide-react', 'clsx', 'tailwind-merge'],
   },
   plugins: [
-    react(
-      command === 'serve'
-        ? { babel: { plugins: ['react-dev-locator'] } }
-        : undefined,
-    ),
+    react(),
     tsconfigPaths()
   ],
-}))
+})

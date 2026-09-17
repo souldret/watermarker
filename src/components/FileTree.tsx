@@ -11,6 +11,7 @@ function FileTree() {
   const pageFilter = useAppStore((s) => s.pageFilter);
   const previewPath = useAppStore((s) => s.previewPath);
   const setPreviewByPath = useAppStore((s) => s.setPreviewByPath);
+  const settings = useAppStore((s) => s.settings);
 
   const displayChapters = pageFilter.enabled
     ? applyFilterToChapters(chapters, pageFilter)
@@ -60,6 +61,9 @@ function FileTree() {
                   >
                     <FileImage className="h-3 w-3 shrink-0 opacity-60" />
                     <span className="truncate">{img.name}</span>
+                    {settings.logo1CustomXYOverrides?.[img.path] && (
+                      <span className="ml-auto shrink-0 text-[9px] text-amber-300">●</span>
+                    )}
                   </button>
                 </li>
               ))}

@@ -15,13 +15,11 @@ export default function AdvancedOptions() {
   const patchLongStripMode = useAppStore((s) => s.patchLongStripMode);
   const tw = settings.textWatermark ?? DEFAULT_TEXT_WATERMARK;
   const lsm = settings.longStripMode;
-  // Serbest konum seçiliyken long-strip toggle disabled
-  const hasCustomXY = Boolean(settings.logo1CustomXY);
 
   return (
     <section className="panel space-y-3">
       <div className="panel__head">
-        <h2 className="panel__title">{t('text_wm')} / AI</h2>
+        <h2 className="panel__title">{t('advanced')}</h2>
       </div>
 
       <label className="flex items-center gap-2 text-xs text-ink-text">
@@ -46,22 +44,15 @@ export default function AdvancedOptions() {
             </span>
           )}
         </div>
-        <label
-          className={`flex items-center gap-2 text-xs ${hasCustomXY ? 'opacity-40 cursor-not-allowed' : 'text-ink-text'}`}
-          title={hasCustomXY ? t('long_strip_custom_xy_disabled') : undefined}
-        >
+        <label className="flex items-center gap-2 text-xs text-ink-text">
           <input
             type="checkbox"
             checked={lsm.enabled}
-            disabled={hasCustomXY}
             onChange={(e) => patchLongStripMode({ enabled: e.target.checked })}
           />
           {t('long_strip_enabled')}
         </label>
-        {hasCustomXY && (
-          <p className="text-[10px] text-amber-400/80">{t('long_strip_custom_xy_disabled')}</p>
-        )}
-        <div className={lsm.enabled && !hasCustomXY ? 'grid grid-cols-2 gap-2' : 'pointer-events-none grid grid-cols-2 gap-2 opacity-40'}>
+        <div className={lsm.enabled ? 'grid grid-cols-2 gap-2' : 'pointer-events-none grid grid-cols-2 gap-2 opacity-40'}>
           <div>
             <label className="mb-1 block text-[11px] text-ink-muted">{t('long_strip_threshold')}</label>
             <input

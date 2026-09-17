@@ -30,12 +30,13 @@ describe('calcLogoRects — normal görsel (long-strip devre dışı)', () => {
     expect(rects).toHaveLength(1);
   });
 
-  it('customXY verilince tekrar uygulanmaz (serbest konum)', () => {
+  it('customXY verilince edge-anchor ile tekrar uygulanır', () => {
     const rects = calcLogoRects(800, 9000, 100, 50, 'br', baseSettings, {
-      x: 0.5, y: 0.5, mode: 'ratio',
+      x: 0.5, y: 0.08, mode: 'edge-anchor',
+      anchorX: 'right', anchorY: 'top',
+      offsetXPx: 40, offsetYPx: 40,
     });
-    // Serbest konumda long-strip pasif
-    expect(rects).toHaveLength(1);
+    expect(rects.length).toBeGreaterThan(1);
   });
 });
 

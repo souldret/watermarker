@@ -41,6 +41,9 @@ export function mergeSettings(partial?: Partial<WatermarkSettings> | null): Wate
         ? [...partial.positions]
         : [...DEFAULT_SETTINGS.positions],
     logo1CustomXY: partial?.logo1CustomXY ?? null,
+    logo1CustomXYOverrides: {
+      ...(partial?.logo1CustomXYOverrides ?? {}),
+    },
     textWatermark: {
       ...DEFAULT_TEXT_WATERMARK,
       ...partial?.textWatermark,

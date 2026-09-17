@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Crosshair, Maximize2, X, MousePointer2, Info } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { buildEdgeAnchorXY, drawPreview } from '@/lib/watermark';
+import { buildEdgeAnchorXY, drawPreview, resolveLogo1CustomXY } from '@/lib/watermark';
 import { useI18n } from '@/hooks/useI18n';
 import { cn } from '@/lib/utils';
 import type { CustomXY } from '@/lib/types';
@@ -20,13 +20,17 @@ function InteractivePreview() {
   const logo2Source = useAppStore((s) => s.logo2Source);
   const settings = useAppStore((s) => s.settings);
   const previewImageUrl = useAppStore((s) => s.previewImageUrl);
+  const previewPath = useAppStore((s) => s.previewPath);
   const setLogo1CustomXY = useAppStore((s) => s.setLogo1CustomXY);
+  const clearLogo1PageOverride = useAppStore((s) => s.clearLogo1PageOverride);
   const patchLogo2Settings = useAppStore((s) => s.patchLogo2Settings);
   const patchSettings = useAppStore((s) => s.patchSettings);
 
   const customXYMode = settings.customXYMode ?? 'edge-anchor';
+  const pageOverride = previewPath ? settings.logo1CustomXYOverrides?.[previewPath] : undefined;
+  const [pinScope, setPinScope] = useState<'global' | 'page'>('global');
 
-  const logo1XY = settings.logo1CustomXY;
+  const logo1XY = resolveLogo1CustomXY(settings, previewPath);
   const logo2XY = settings.logo2?.customXY;
 
   // Hangi logo'yu konumlandırıyoruz
@@ -169,7 +173,7 @@ function InteractivePreview() {
     recalcMaxDims();
     const { maxW, maxH } = maxDimsRef.current;
     try {
-      drawPreview(canvas, img, img.naturalWidth, img.naturalHeight, logoSource, logo2Source, settings, maxW, maxH);
+      drawPreview(canvas, img, img.naturalWidth, img.naturalHeight, logoSource, logo2Source, settings, maxW, maxH, previewPath);
     } catch {
       // önizleme hatası kritik değil
     }
@@ -178,7 +182,7 @@ function InteractivePreview() {
     else baseSnapshotRef.current = null;
 
     drawOverlay();
-  }, [previewImageUrl, logoSource, logo2Source, settings, recalcMaxDims, drawOverlay]);
+  }, [previewImageUrl, previewPath, logoSource, logo2Source, settings, recalcMaxDims, drawOverlay]);
 
   // Debounce wrapper — slider gibi hızlı ayar değişimlerinde gereksiz yeniden çizimi önler
   const paint = useCallback(() => {
@@ -259,9 +263,9 @@ function InteractivePreview() {
   /** Konumu uygula */
   const applyXY = useCallback((ratio: { x: number; y: number }, target: 'logo1' | 'logo2') => {
     const xy = buildCustomXY(ratio);
-    if (target === 'logo1') setLogo1CustomXY(xy);
+    if (target === 'logo1') setLogo1CustomXY(xy, pinScope);
     else patchLogo2Settings({ customXY: xy });
-  }, [buildCustomXY, setLogo1CustomXY, patchLogo2Settings]);
+  }, [buildCustomXY, setLogo1CustomXY, patchLogo2Settings, pinScope]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
@@ -346,16 +350,37 @@ function InteractivePreview() {
           {hasLogo1 && (
             <button
               type="button"
-              onClick={() => setPinTarget(pinTarget === 'logo1' ? null : 'logo1')}
+              onClick={() => {
+                setPinScope('global');
+                setPinTarget(pinTarget === 'logo1' && pinScope === 'global' ? null : 'logo1');
+              }}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition',
-                pinTarget === 'logo1'
+                pinTarget === 'logo1' && pinScope === 'global'
                   ? 'border-seal bg-seal/15 text-seal'
                   : 'border-ink-border bg-ink-deep text-ink-muted hover:border-seal/40',
               )}
             >
               <MousePointer2 className="h-3 w-3" />
-              {pinTarget === 'logo1' ? t('click_to_place') : t('pin_logo1')}
+              {pinTarget === 'logo1' && pinScope === 'global' ? t('click_to_place') : t('pin_logo1')}
+            </button>
+          )}
+          {hasLogo1 && previewPath && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = pinTarget === 'logo1' && pinScope === 'page' ? null : 'logo1';
+                setPinScope('page');
+                setPinTarget(next);
+              }}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition',
+                pinTarget === 'logo1' && pinScope === 'page'
+                  ? 'border-amber-400 bg-amber-400/15 text-amber-300'
+                  : 'border-ink-border bg-ink-deep text-ink-muted hover:border-amber-400/40',
+              )}
+            >
+              {t('pin_this_page')}
             </button>
           )}
           {/* Logo 2 konumlandır */}
@@ -378,7 +403,11 @@ function InteractivePreview() {
           {(logo1XY || logo2XY) && (
             <button
               type="button"
-              onClick={() => { setLogo1CustomXY(null); patchLogo2Settings({ customXY: null }); }}
+              onClick={() => {
+                setLogo1CustomXY(null);
+                if (previewPath) clearLogo1PageOverride(previewPath);
+                patchLogo2Settings({ customXY: null });
+              }}
               className="inline-flex items-center gap-1 rounded-md border border-ink-border bg-ink-deep px-2 py-0.5 text-[10px] text-ink-muted hover:text-ink-text"
             >
               <X className="h-3 w-3" />
@@ -397,7 +426,9 @@ function InteractivePreview() {
             : 'border-sky-400/40 bg-sky-400/10 text-sky-300',
         )}>
           <Crosshair className="h-3.5 w-3.5" />
-          {pinTarget === 'logo1' ? t('pin_logo1_hint') : t('pin_logo2_hint')}
+          {pinTarget === 'logo1'
+            ? (pinScope === 'page' ? t('pin_this_page_hint') : t('pin_logo1_hint'))
+            : t('pin_logo2_hint')}
         </div>
       )}
 
@@ -453,7 +484,7 @@ function InteractivePreview() {
       <div className="mt-1.5 space-y-1.5">
         {/* Konum modu seçici */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-ink-muted">Konum modu:</span>
+          <span className="text-[10px] text-ink-muted">{t('position_mode')}:</span>
           {(['edge-anchor', 'ratio'] as const).map((m) => (
             <button
               key={m}
@@ -468,7 +499,7 @@ function InteractivePreview() {
                   : 'text-ink-muted hover:text-ink-text',
               )}
             >
-              {m === 'edge-anchor' ? 'Kenar mesafesi' : 'Oran (0-1)'}
+              {m === 'edge-anchor' ? t('edge_distance') : t('ratio_01')}
             </button>
           ))}
         </div>
@@ -477,13 +508,9 @@ function InteractivePreview() {
         <div className="flex items-start gap-1 text-[10px] text-ink-muted">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
           {customXYMode === 'edge-anchor' ? (
-            <span>
-              Bu konum tüm sayfalara <strong className="text-ink-text">kenar mesafesi</strong> olarak uygulanacak — uzun şeritlerde tutarlı.
-            </span>
+            <span>{t('edge_mode_hint')}</span>
           ) : (
-            <span>
-              Bu konum tüm sayfalara <strong className="text-ink-text">oran (0-1)</strong> olarak uygulanacak — farklı en-boy oranında görsel kayma olabilir.
-            </span>
+            <span>{t('ratio_mode_hint')}</span>
           )}
         </div>
 
@@ -501,6 +528,11 @@ function InteractivePreview() {
               {logo2XY.mode === 'edge-anchor' && logo2XY.anchorX
                 ? `L2 ${logo2XY.anchorX[0]}${logo2XY.anchorY?.[0] ?? ''} +${Math.round(logo2XY.offsetXPx ?? 0)}/${Math.round(logo2XY.offsetYPx ?? 0)}px`
                 : `L2 (${(logo2XY.x * 100).toFixed(0)}%, ${(logo2XY.y * 100).toFixed(0)}%)`}
+            </span>
+          )}
+          {pageOverride && (
+            <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-amber-300">
+              {t('page_override_on')}
             </span>
           )}
           {!logo1XY && !logo2XY && (
