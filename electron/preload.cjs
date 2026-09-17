@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('electronSharp', {
   /**
    * Sharp ile watermark uygula.
    * @param opts - { imageBuffer, logoBuffer, logoWidth, logoHeight,
-   *                 gravity, offsetX, offsetY, opacity, outputMime, quality }
+   *                 left, top, opacity, outputMime, quality }
    * @returns { buffer: Uint8Array, mime: string } | { error: string }
    */
   applyWatermark: (opts) => ipcRenderer.invoke('sharp:applyWatermark', opts),

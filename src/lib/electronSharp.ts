@@ -2,13 +2,13 @@
  * electronSharp.ts
  * Renderer tarafı Electron sharp köprüsü.
  *
- * Basit ızgara konumları (customXY / 2. logo / metin / long-strip yok) için
- * native sharp kullanılır. Aksi halde null → Canvas 2D / worker fallback.
+ * Basit ızgara konumları (customXY / 2. logo / metin yok) için native sharp.
+ * Uzun şerit görseller Canvas/worker'a düşer; ayarın açık olması tüm batch'i engellemez.
  */
 
 import type { WatermarkSettings } from './types';
 import type { LogoSource } from './watermark';
-import { calcLogoSize } from './watermark';
+import { calcLogoRect } from './watermark';
 import { outputMimeFor } from './imageFormats';
 
 declare global {
@@ -26,9 +26,8 @@ interface SharpIpcOpts {
   logoBuffer: ArrayBuffer;
   logoWidth: number;
   logoHeight: number;
-  gravity: string;
-  offsetX: number;
-  offsetY: number;
+  left: number;
+  top: number;
   opacity: number;
   outputMime: string;
   quality: number;
@@ -61,27 +60,29 @@ export function resetSharpAvailableCache(): void {
   _sharpAvailableCache = null;
 }
 
+/**
+ * Sharp yalnızca tek ızgara logosu + opacity/margin destekler.
+ * Long-strip görsel bazında applyWatermarkViaSharp içinde elenir —
+ * ayar açık diye tüm batch'i Canvas'a düşürmeyelim.
+ */
 export function canUseElectronSharp(settings: WatermarkSettings, hasLogo2: boolean): boolean {
   if (settings.logo1CustomXY) return false;
-  if (settings.logo1CustomXYOverrides && Object.keys(settings.logo1CustomXYOverrides).length > 0) {
-    return false;
-  }
   if (settings.textWatermark?.enabled) return false;
   if (hasLogo2 && settings.logo2?.enabled) return false;
-  if (settings.longStripMode?.enabled) return false;
   if (settings.smartPosition) return false;
   if ((settings.positions?.length ?? 0) !== 1) return false;
   if (settings.rotation) return false;
   return true;
 }
 
-function positionToGravity(pos: string): string {
-  const map: Record<string, string> = {
-    tl: 'northwest', tc: 'north', tr: 'northeast',
-    ml: 'west',      mc: 'center', mr: 'east',
-    bl: 'southwest', bc: 'south', br: 'southeast',
-  };
-  return map[pos] || 'southeast';
+export function imageNeedsLongStrip(
+  settings: Pick<WatermarkSettings, 'longStripMode'>,
+  width: number,
+  height: number,
+): boolean {
+  const lsm = settings.longStripMode;
+  if (!lsm?.enabled) return false;
+  return height / Math.max(1, width) >= lsm.aspectThreshold;
 }
 
 async function logoToBuffer(logo: LogoSource): Promise<ArrayBuffer | null> {
@@ -122,11 +123,15 @@ async function logoToBuffer(logo: LogoSource): Promise<ArrayBuffer | null> {
   }
 }
 
-async function readImageWidth(imageBuffer: ArrayBuffer, fileName: string): Promise<number | null> {
+async function readImageSize(
+  imageBuffer: ArrayBuffer,
+): Promise<{ width: number; height: number } | null> {
   if (window.electronSharp?.imageSize) {
     try {
       const meta = await window.electronSharp.imageSize(imageBuffer.slice(0));
-      if ('width' in meta && meta.width > 0) return meta.width;
+      if ('width' in meta && meta.width > 0 && meta.height > 0) {
+        return { width: meta.width, height: meta.height };
+      }
     } catch {
       // fallback
     }
@@ -134,11 +139,10 @@ async function readImageWidth(imageBuffer: ArrayBuffer, fileName: string): Promi
   try {
     const blob = new Blob([imageBuffer]);
     const bmp = await createImageBitmap(blob);
-    const w = bmp.width;
+    const size = { width: bmp.width, height: bmp.height };
     bmp.close();
-    return w;
+    return size.width > 0 && size.height > 0 ? size : null;
   } catch {
-    void fileName;
     return null;
   }
 }
@@ -160,21 +164,28 @@ export async function applyWatermarkViaSharp(
     const logoBuffer = await logoToBuffer(logo);
     if (!logoBuffer) return null;
 
-    const imageW = await readImageWidth(imageBuffer, imageFile.name);
-    if (!imageW) return null;
+    const imageSize = await readImageSize(imageBuffer);
+    if (!imageSize) return null;
+    if (imageNeedsLongStrip(settings, imageSize.width, imageSize.height)) return null;
 
-    const { w: logoW, h: logoH } = calcLogoSize(imageW, logo.width, logo.height, settings);
     const pos = settings.positions?.[0] || 'br';
     const { mime: outputMime, ext } = outputMimeFor(settings.outputFormat, imageFile.name);
+    const rect = calcLogoRect(
+      imageSize.width,
+      imageSize.height,
+      logo.width,
+      logo.height,
+      pos,
+      settings,
+    );
 
     const result = await window.electronSharp.applyWatermark({
       imageBuffer,
       logoBuffer: logoBuffer.slice(0),
-      logoWidth: Math.max(1, Math.round(logoW)),
-      logoHeight: Math.max(1, Math.round(logoH)),
-      gravity: positionToGravity(pos),
-      offsetX: Math.max(0, settings.marginPx),
-      offsetY: Math.max(0, settings.marginPx),
+      logoWidth: Math.max(1, Math.round(rect.w)),
+      logoHeight: Math.max(1, Math.round(rect.h)),
+      left: Math.max(0, Math.round(rect.x)),
+      top: Math.max(0, Math.round(rect.y)),
       opacity: settings.opacity,
       outputMime,
       quality: settings.outputQuality,

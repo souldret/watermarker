@@ -130,7 +130,13 @@ export function createPreset(
   return {
     id: uid(),
     name: name.trim() || 'İsimsiz preset',
-    settings: cloneJson(mergeSettings(settings)),
+    settings: cloneJson(
+      mergeSettings({
+        ...settings,
+        // Sayfa pin'leri ekip preset'ine girmez
+        logo1CustomXYOverrides: {},
+      }),
+    ),
     pageFilter: cloneJson(mergeFilter(pageFilter)),
     createdAt: Date.now(),
     schemaVersion: CURRENT_SCHEMA_VERSION,

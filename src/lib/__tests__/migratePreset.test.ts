@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { migratePreset, CURRENT_SCHEMA_VERSION } from '../presets';
-import { DEFAULT_SETTINGS } from '../types';
+import { migratePreset, CURRENT_SCHEMA_VERSION, createPreset } from '../presets';
+import { DEFAULT_PAGE_FILTER, DEFAULT_SETTINGS } from '../types';
 
 describe('migratePreset — eski format (schemaVersion yok)', () => {
   it('schemaVersion olmayan preset hata vermez', () => {
@@ -166,5 +166,19 @@ describe('migratePreset — pageFilter dönüşümü', () => {
     });
     expect(result.pageFilter.enabled).toBe(true);
     expect(result.pageFilter.firstN).toBe(3);
+  });
+});
+
+describe('createPreset', () => {
+  it('sayfa pin override\'larını preset\'e yazmaz', () => {
+    const p = createPreset(
+      'Ekip',
+      {
+        ...DEFAULT_SETTINGS,
+        logo1CustomXYOverrides: { 'ch/001.jpg': { x: 0.2, y: 0.3, mode: 'ratio' } },
+      },
+      DEFAULT_PAGE_FILTER,
+    );
+    expect(p.settings.logo1CustomXYOverrides).toEqual({});
   });
 });

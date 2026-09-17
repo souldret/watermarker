@@ -35,9 +35,8 @@ async function applyWatermarkSharp(opts) {
       logoBuffer,
       logoWidth,
       logoHeight,
-      gravity = 'southeast',
-      offsetX = 24,
-      offsetY = 24,
+      left = 0,
+      top = 0,
       opacity = 0.55,
       outputMime = 'image/jpeg',
       quality = 0.92,
@@ -46,7 +45,6 @@ async function applyWatermarkSharp(opts) {
     const imgBuf = Buffer.from(imageBuffer);
     const logoBuf = Buffer.from(logoBuffer);
 
-    // Logo'yu ölçekle (logoWidth/logoHeight zaten hesaplanmış gelir)
     const resizedLogo = await sharpLib(logoBuf)
       .resize(Math.max(1, Math.round(logoWidth)), Math.max(1, Math.round(logoHeight)), {
         fit: 'fill',
@@ -54,22 +52,12 @@ async function applyWatermarkSharp(opts) {
       .png()
       .toBuffer();
 
-    // sharp gravity → numerik değil, string pozisyon
-    const gravityMap = {
-      tl: 'northwest', tc: 'north', tr: 'northeast',
-      ml: 'west',      mc: 'center', mr: 'east',
-      bl: 'southwest', bc: 'south', br: 'southeast',
-    };
-    const sharpGravity = gravityMap[gravity] || gravity;
-
     let pipeline = sharpLib(imgBuf).composite([
       {
         input: resizedLogo,
-        gravity: sharpGravity,
-        top: gravity.includes('top') || gravity.startsWith('t') || gravity === 'northwest' || gravity === 'north' || gravity === 'northeast' ? offsetY : undefined,
-        left: gravity.includes('left') || gravity === 'northwest' || gravity === 'west' || gravity === 'southwest' ? offsetX : undefined,
+        left: Math.max(0, Math.round(left)),
+        top: Math.max(0, Math.round(top)),
         blend: 'over',
-        // opacity: sharp 0.30+ destekliyor — daha eski sürümlerde yok
         ...(typeof opacity === 'number' && opacity < 1 ? { opacity } : {}),
       },
     ]);

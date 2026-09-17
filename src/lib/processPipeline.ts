@@ -377,7 +377,6 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
 
   try {
     if (
-      !sharpReady &&
       typeof Worker !== 'undefined' &&
       typeof OffscreenCanvas !== 'undefined' &&
       typeof createImageBitmap !== 'undefined'

@@ -18,7 +18,9 @@
 ### Hata Düzeltmeleri
 - **Worker sapması:** Worker yolu akıllı konum (`resolveWatermarkPositions`) ve gerçek çıktı MIME'sini ana Canvas motoruyla aynı şekilde uygulıyor.
 - **Logo transferi:** Logo buffer'ı her görselde transfer edilerek ikinci işte logo kaybolmuyordu; worker'lar init'te logo yüklüyor, hazır olana kadar bekleniyor. Init başarısızsa iş başına yedek kopya gönderiliyor.
-- **İptal checkpoint:** İptalde checkpoint silinmiyor; kaldığı yerden devam çalışıyor.
+- **İptal checkpoint:** İptalde checkpoint silinmiyor; aynı klasör yeniden seçilince resume korunuyor.
+- **Sharp:** Varsayılan long-strip tüm batch'i Canvas'a düşürmüyordu; kısa sayfalar native, uzun şerit worker/Canvas. Konum `left/top` (margin doğru).
+- **Preset:** Sayfa pin override'ları ekip preset'ine yazılmıyor.
 - **Uzun şerit:** Taşan Y değerleri alt kenara clamp edilmiyor — aynı logonun altta çoğalması durdu.
 - **Yazma hatası:** Klasöre hata raporu yazılırken stream `finally` ile kapanıyor.
 - **Animasyonlu WebP:** Header okuma jsdom/küçük dosya sapmasına dayanıklı; ANIM araması 512 byte.

@@ -34,7 +34,7 @@ import {
   savePresets,
 } from '@/lib/presets';
 import { applyThemeToDom, loadUiPrefs, saveUiPrefs } from '@/lib/uiPrefs';
-import { loadCheckpoint, saveCheckpoint } from '@/lib/checkpoint';
+import { loadCheckpoint, saveCheckpoint, shouldKeepCheckpoint } from '@/lib/checkpoint';
 import { blobForPreview } from '@/lib/imageFormats';
 
 interface AppState {
@@ -287,13 +287,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     const prev = get().previewImageUrl;
     if (prev) URL.revokeObjectURL(prev);
     const first = chapters[0]?.images[0] ?? null;
-    saveCheckpoint(null);
+    const keep = shouldKeepCheckpoint(get().checkpoint, sourceLabel);
+    if (!keep) saveCheckpoint(null);
     set({
       chapters,
       sourceLabel,
       result: null,
       progress: null,
-      checkpoint: null,
+      checkpoint: keep ? get().checkpoint : null,
       previewPath: first?.path ?? null,
       previewImageUrl: first ? URL.createObjectURL(blobForPreview(first.file)) : null,
     });

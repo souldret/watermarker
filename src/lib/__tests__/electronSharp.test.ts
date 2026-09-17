@@ -9,6 +9,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   canUseElectronSharp,
+  imageNeedsLongStrip,
   isElectronSharpAvailable,
   resetSharpAvailableCache,
 } from '../electronSharp';
@@ -94,17 +95,23 @@ describe('ADIM 23 — sharp yok: Canvas 2D fallback', () => {
 });
 
 describe('canUseElectronSharp', () => {
-  it('basit ızgara + tek logo → true', () => {
-    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, longStripMode: { ...DEFAULT_SETTINGS.longStripMode, enabled: false } }, false)).toBe(true);
+  it('basit ızgara + tek logo → true (long-strip ayarı açık olsa bile)', () => {
+    expect(canUseElectronSharp(DEFAULT_SETTINGS, false)).toBe(true);
   });
 
   it('customXY veya 2. logo veya metin → false', () => {
-    const base = { ...DEFAULT_SETTINGS, longStripMode: { ...DEFAULT_SETTINGS.longStripMode, enabled: false } };
-    expect(canUseElectronSharp({ ...base, logo1CustomXY: { x: 0.5, y: 0.5 } }, false)).toBe(false);
-    expect(canUseElectronSharp({ ...base, logo2: { ...base.logo2, enabled: true } }, true)).toBe(false);
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, logo1CustomXY: { x: 0.5, y: 0.5 } }, false)).toBe(false);
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, logo2: { ...DEFAULT_SETTINGS.logo2, enabled: true } }, true)).toBe(false);
     expect(canUseElectronSharp({
-      ...base,
-      textWatermark: { ...base.textWatermark, enabled: true },
+      ...DEFAULT_SETTINGS,
+      textWatermark: { ...DEFAULT_SETTINGS.textWatermark, enabled: true },
     }, false)).toBe(false);
+  });
+});
+
+describe('imageNeedsLongStrip', () => {
+  it('800x9000 → true, 800x1200 → false', () => {
+    expect(imageNeedsLongStrip(DEFAULT_SETTINGS, 800, 9000)).toBe(true);
+    expect(imageNeedsLongStrip(DEFAULT_SETTINGS, 800, 1200)).toBe(false);
   });
 });

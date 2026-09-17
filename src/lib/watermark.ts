@@ -192,8 +192,8 @@ export function calcLogoRect(
  * Uzun şerit modu için çoklu rect listesi döner.
  * - longStripMode.enabled ve imageH/imageW >= aspectThreshold ise
  *   tek rect'i Y ekseninde repeatEveryPx aralıklarıyla tekrarlar.
- * - customXY (serbest konum) varsa tekrar UYGULANMAZ — tek rect döner.
- * - Aksi halde tek elemanlı array döner (mevcut davranış).
+ * - customXY varsa da tekrar uygulanır (kenar-anchor / oran merkezinden Y kaydırılır).
+ * - Aksi halde tek elemanlı array döner.
  */
 export function calcLogoRects(
   imageW: number,
