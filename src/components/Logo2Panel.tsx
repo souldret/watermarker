@@ -151,7 +151,7 @@ export default function Logo2Panel() {
         <div>
           <label className="mb-0.5 block text-ink-muted">{t('size_pct')}</label>
           <input
-            type="range" min={2} max={50} step={1}
+            type="range" min={2} max={100} step={1}
             value={l2.sizePercent}
             onChange={(e) => patchLogo2Settings({ sizePercent: Number(e.target.value), sizeMode: 'percent' })}
             className="range w-full"

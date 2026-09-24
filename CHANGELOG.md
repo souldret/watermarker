@@ -2,6 +2,16 @@
 
 ## [Unreleased] — 2026-09-24
 
+### UI
+- Logo boyutu kaydırıcısı %100'e çıkıyor (Logo 2 de).
+- Döndürme −180°…+180°.
+- Önizlemede sağ-alt köşeden sürükleyerek logo boyutu. “Sadece bu sayfa” konumu ve boyutu birlikte pinler.
+- “Çıktı ölçeği”: uzun şerit ekrana sığdırılmaz, damga çıktıdaki genişlik oranında görünür.
+- İşlem satırı: bölüm x/y, sayfa x/y ve tahmini kalan süre.
+
+### Performans
+- Electron sharp artık döndürme, ikinci logo, serbest konum ve uzun şerit tekrarını da basıyor. Akıllı konum ve metin watermark Canvas'ta kalır.
+
 ### Hata Düzeltmeleri
 - **Animasyonlu WebP:** Ham "ANIM" taraması piksel verisinde yanlış pozitif üretiyordu. Artık RIFF/WEBP + VP8X animasyon bayrağı ve 4-hizalı ANIM chunk aranıyor.
 - **Worker havuzu:** Zaman aşımı veya çökmede worker havuza geri dönüyordu ve sonraki işler de kilitleniyordu. Bozuk worker kapatılıp logosu yüklü yenisiyle değiştiriliyor; kapanışta bekleyen kuyruk reddediliyor.

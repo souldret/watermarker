@@ -512,7 +512,12 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
         opts.logo &&
         canUseElectronSharp(jobSettings, Boolean(opts.logo2 && jobSettings.logo2?.enabled))
       ) {
-        const sharpResult = await applyWatermarkViaSharp(job.image.file, opts.logo, jobSettings);
+        const sharpResult = await applyWatermarkViaSharp(
+          job.image.file,
+          opts.logo,
+          jobSettings,
+          opts.logo2,
+        );
         if (sharpResult) {
           return { blob: sharpResult.blob, ext: sharpResult.ext || ext };
         }
@@ -558,15 +563,36 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
     const results: Map<number, { blob: Blob; ext: string } | null> = new Map();
     const errors: Map<number, Error> = new Map();
 
-    async function runJob(job: FlatJob, i: number): Promise<void> {
-      opts.onProgress({
+    const chapterOrder: string[] = [];
+    const chapterCounts = new Map<string, number>();
+    for (const job of jobs) {
+      if (!chapterCounts.has(job.chapterName)) chapterOrder.push(job.chapterName);
+      chapterCounts.set(job.chapterName, (chapterCounts.get(job.chapterName) ?? 0) + 1);
+    }
+    const chapterIndexOf = new Map(chapterOrder.map((name, i) => [name, i + 1]));
+    const processStarted = Date.now();
+
+    function progressFor(job: FlatJob, i: number, phase: ProcessProgress['phase'], fileName?: string): ProcessProgress {
+      const done = Math.max(1, i + 1 - startIndex);
+      const elapsed = Date.now() - processStarted;
+      const etaMs = Math.round((elapsed / done) * Math.max(0, totalImages - (i + 1)));
+      return {
         current: i + 1,
         total: totalImages,
         chapterName: job.chapterName,
-        fileName: job.image.name,
+        fileName: fileName ?? job.image.name,
         percent: Math.round(((i + 1) / totalImages) * 100),
-        phase: 'process',
-      });
+        phase,
+        chapterIndex: chapterIndexOf.get(job.chapterName),
+        chapterTotal: chapterOrder.length,
+        pageInChapter: job.imageIndexInChapter + 1,
+        pageTotalInChapter: chapterCounts.get(job.chapterName),
+        etaMs,
+      };
+    }
+
+    async function runJob(job: FlatJob, i: number): Promise<void> {
+      opts.onProgress(progressFor(job, i, 'process'));
 
       try {
         const res = await processOne(job, i);
@@ -641,14 +667,7 @@ export async function runProcessPipeline(opts: PipelineOptions): Promise<Process
       });
 
       if (outDir) {
-        opts.onProgress({
-          current: i + 1,
-          total: totalImages,
-          chapterName: job.chapterName,
-          fileName,
-          percent: Math.round(((i + 1) / totalImages) * 100),
-          phase: 'write',
-        });
+        opts.onProgress(progressFor(job, i, 'write', fileName));
         await writeBlobToTree(outDir, job.chapterName, fileName, blob);
       } else if (zip) {
         const folder = zip.folder(job.chapterName) || zip;

@@ -27,6 +27,61 @@ function tryLoadSharp() {
  *   gravity, offsetX, offsetY, opacity, outputMime, quality }
  * Döner: { buffer, mime } veya { error }
  */
+async function stampLogo(logoBuf, logoWidth, logoHeight, rotation) {
+  const resized = await sharpLib(logoBuf)
+    .resize(Math.max(1, Math.round(logoWidth)), Math.max(1, Math.round(logoHeight)), { fit: 'fill' })
+    .png()
+    .toBuffer();
+  const deg = Number(rotation) || 0;
+  if (!deg) {
+    const meta = await sharpLib(resized).metadata();
+    return { buffer: resized, width: meta.width || logoWidth, height: meta.height || logoHeight };
+  }
+  const rotated = await sharpLib(resized)
+    .rotate(deg, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+  const meta = await sharpLib(rotated).metadata();
+  return { buffer: rotated, width: meta.width || logoWidth, height: meta.height || logoHeight };
+}
+
+/** Döndürülmüş logo büyür; merkezi koru, görsel dışına taşanı kırp. Sharp negatif left/top kabul etmez. */
+async function layerAt(stamp, rect, imageW, imageH, opacity) {
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  let left = Math.round(cx - stamp.width / 2);
+  let top = Math.round(cy - stamp.height / 2);
+  let cropL = 0;
+  let cropT = 0;
+  let cropW = stamp.width;
+  let cropH = stamp.height;
+  if (left < 0) { cropL = -left; cropW -= cropL; left = 0; }
+  if (top < 0) { cropT = -top; cropH -= cropT; top = 0; }
+  if (left + cropW > imageW) cropW = imageW - left;
+  if (top + cropH > imageH) cropH = imageH - top;
+  cropW = Math.round(cropW);
+  cropH = Math.round(cropH);
+  if (cropW < 1 || cropH < 1) return null;
+  let input = stamp.buffer;
+  if (cropL || cropT || cropW !== stamp.width || cropH !== stamp.height) {
+    input = await sharpLib(stamp.buffer)
+      .extract({ left: Math.round(cropL), top: Math.round(cropT), width: cropW, height: cropH })
+      .png()
+      .toBuffer();
+  }
+  return {
+    input,
+    left,
+    top,
+    blend: 'over',
+    ...(typeof opacity === 'number' && opacity < 1 ? { opacity } : {}),
+  };
+}
+
+/**
+ * Sharp ile watermark uygula.
+ * repeats: uzun şerit Y tekrarları. logo2: ikinci damga. rotation: derece.
+ */
 async function applyWatermarkSharp(opts) {
   if (!sharpLib) return { error: 'sharp yok' };
   try {
@@ -38,29 +93,42 @@ async function applyWatermarkSharp(opts) {
       left = 0,
       top = 0,
       opacity = 0.55,
+      rotation = 0,
       outputMime = 'image/jpeg',
       quality = 0.92,
+      repeats = [],
+      logo2 = null,
     } = opts;
 
     const imgBuf = Buffer.from(imageBuffer);
-    const logoBuf = Buffer.from(logoBuffer);
+    const baseMeta = await sharpLib(imgBuf).metadata();
+    const imageW = baseMeta.width || 0;
+    const imageH = baseMeta.height || 0;
+    const stamp = await stampLogo(Buffer.from(logoBuffer), logoWidth, logoHeight, rotation);
 
-    const resizedLogo = await sharpLib(logoBuf)
-      .resize(Math.max(1, Math.round(logoWidth)), Math.max(1, Math.round(logoHeight)), {
-        fit: 'fill',
-      })
-      .png()
-      .toBuffer();
+    const spots = [{ x: left, y: top, w: logoWidth, h: logoHeight }];
+    for (const rep of Array.isArray(repeats) ? repeats : []) {
+      spots.push({ x: rep.left, y: rep.top, w: rep.w || logoWidth, h: rep.h || logoHeight });
+    }
+    const layers = [];
+    for (const spot of spots) {
+      const layer = await layerAt(stamp, { x: spot.x, y: spot.y, w: spot.w, h: spot.h }, imageW, imageH, opacity);
+      if (layer) layers.push(layer);
+    }
+    if (logo2 && logo2.buffer) {
+      const stamp2 = await stampLogo(Buffer.from(logo2.buffer), logo2.width, logo2.height, logo2.rotation);
+      const spots2 = [{ x: logo2.left, y: logo2.top, w: logo2.width, h: logo2.height }];
+      for (const rep of Array.isArray(logo2.repeats) ? logo2.repeats : []) {
+        spots2.push({ x: rep.left, y: rep.top, w: rep.w || logo2.width, h: rep.h || logo2.height });
+      }
+      for (const spot of spots2) {
+        const layer2 = await layerAt(stamp2, spot, imageW, imageH, logo2.opacity);
+        if (layer2) layers.push(layer2);
+      }
+    }
+    if (layers.length === 0) return { error: 'logo görsele sığmadı' };
 
-    let pipeline = sharpLib(imgBuf).composite([
-      {
-        input: resizedLogo,
-        left: Math.max(0, Math.round(left)),
-        top: Math.max(0, Math.round(top)),
-        blend: 'over',
-        ...(typeof opacity === 'number' && opacity < 1 ? { opacity } : {}),
-      },
-    ]);
+    let pipeline = sharpLib(imgBuf).composite(layers);
 
     let outBuf;
     if (outputMime === 'image/png') {

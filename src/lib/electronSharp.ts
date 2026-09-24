@@ -8,7 +8,7 @@
 
 import type { WatermarkSettings } from './types';
 import type { LogoSource } from './watermark';
-import { calcLogoRect } from './watermark';
+import { calcLogoRect, calcLogo2Rect, calcLogoRects } from './watermark';
 import { outputMimeFor } from './imageFormats';
 
 declare global {
@@ -29,8 +29,21 @@ interface SharpIpcOpts {
   left: number;
   top: number;
   opacity: number;
+  rotation?: number;
   outputMime: string;
   quality: number;
+  /** Uzun şerit veya ek ızgara noktası */
+  repeats?: { left: number; top: number; w?: number; h?: number }[];
+  logo2?: {
+    buffer: ArrayBuffer;
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+    opacity: number;
+    rotation?: number;
+    repeats?: { left: number; top: number; w?: number; h?: number }[];
+  };
 }
 
 interface SharpIpcResult {
@@ -61,17 +74,13 @@ export function resetSharpAvailableCache(): void {
 }
 
 /**
- * Sharp yalnızca tek ızgara logosu + opacity/margin destekler.
- * Long-strip görsel bazında applyWatermarkViaSharp içinde elenir —
- * ayar açık diye tüm batch'i Canvas'a düşürmeyelim.
+ * Sharp: ızgara veya serbest konum, döndürme, ikinci logo ve uzun şerit tekrarı.
+ * Akıllı konum ve metin watermark Canvas/worker'da kalır.
  */
-export function canUseElectronSharp(settings: WatermarkSettings, hasLogo2: boolean): boolean {
-  if (settings.logo1CustomXY) return false;
-  if (settings.textWatermark?.enabled) return false;
-  if (hasLogo2 && settings.logo2?.enabled) return false;
+export function canUseElectronSharp(settings: WatermarkSettings, _hasLogo2: boolean): boolean {
   if (settings.smartPosition) return false;
-  if ((settings.positions?.length ?? 0) !== 1) return false;
-  if (settings.rotation) return false;
+  if (settings.textWatermark?.enabled) return false;
+  if ((settings.positions?.length ?? 0) < 1) return false;
   return true;
 }
 
@@ -155,9 +164,10 @@ export async function applyWatermarkViaSharp(
   imageFile: File,
   logo: LogoSource,
   settings: WatermarkSettings,
+  logo2?: LogoSource | null,
 ): Promise<{ blob: Blob; mime: string; ext?: string } | null> {
   if (!window.electronSharp) return null;
-  if (!canUseElectronSharp(settings, false)) return null;
+  if (!canUseElectronSharp(settings, Boolean(logo2 && settings.logo2?.enabled))) return null;
 
   try {
     const imageBuffer = await imageFile.arrayBuffer();
@@ -166,29 +176,84 @@ export async function applyWatermarkViaSharp(
 
     const imageSize = await readImageSize(imageBuffer);
     if (!imageSize) return null;
-    if (imageNeedsLongStrip(settings, imageSize.width, imageSize.height)) return null;
 
-    const pos = settings.positions?.[0] || 'br';
-    const { mime: outputMime, ext } = outputMimeFor(settings.outputFormat, imageFile.name);
-    const rect = calcLogoRect(
-      imageSize.width,
-      imageSize.height,
-      logo.width,
-      logo.height,
-      pos,
-      settings,
+    const positions = settings.logo1CustomXY
+      ? ['mc' as const]
+      : (settings.positions?.length ? settings.positions : ['br' as const]);
+    const rects = positions.flatMap((pos) =>
+      calcLogoRects(
+        imageSize.width,
+        imageSize.height,
+        logo.width,
+        logo.height,
+        pos,
+        settings,
+        settings.logo1CustomXY,
+      ),
     );
+    const { mime: outputMime, ext } = outputMimeFor(settings.outputFormat, imageFile.name);
+    const first = rects[0];
+    if (!first) return null;
+
+    let logo2Opts: SharpIpcOpts['logo2'];
+    if (logo2 && settings.logo2?.enabled) {
+      const logo2Buffer = await logoToBuffer(logo2);
+      if (logo2Buffer) {
+        const l2 = settings.logo2;
+        const l2positions = l2.customXY
+          ? ['mc' as const]
+          : (l2.positions?.length ? l2.positions : ['bl' as const]);
+        const r2s = l2positions.map((l2pos) =>
+          calcLogo2Rect(
+            imageSize.width,
+            imageSize.height,
+            logo2.width,
+            logo2.height,
+            l2pos,
+            l2,
+            settings.marginPx,
+            settings.customXYMode ?? 'edge-anchor',
+          ),
+        );
+        const r2 = r2s[0];
+        if (r2) {
+          logo2Opts = {
+            buffer: logo2Buffer.slice(0),
+            width: Math.max(1, Math.round(r2.w)),
+            height: Math.max(1, Math.round(r2.h)),
+            left: Math.round(r2.x),
+            top: Math.round(r2.y),
+            opacity: l2.opacity,
+            rotation: l2.rotation || 0,
+            repeats: r2s.slice(1).map((r) => ({
+              left: Math.round(r.x),
+              top: Math.round(r.y),
+              w: Math.max(1, Math.round(r.w)),
+              h: Math.max(1, Math.round(r.h)),
+            })),
+          };
+        }
+      }
+    }
 
     const result = await window.electronSharp.applyWatermark({
       imageBuffer,
       logoBuffer: logoBuffer.slice(0),
-      logoWidth: Math.max(1, Math.round(rect.w)),
-      logoHeight: Math.max(1, Math.round(rect.h)),
-      left: Math.max(0, Math.round(rect.x)),
-      top: Math.max(0, Math.round(rect.y)),
+      logoWidth: Math.max(1, Math.round(first.w)),
+      logoHeight: Math.max(1, Math.round(first.h)),
+      left: Math.round(first.x),
+      top: Math.round(first.y),
       opacity: settings.opacity,
+      rotation: settings.rotation || 0,
       outputMime,
       quality: settings.outputQuality,
+      repeats: rects.slice(1).map((r) => ({
+        left: Math.round(r.x),
+        top: Math.round(r.y),
+        w: Math.max(1, Math.round(r.w)),
+        h: Math.max(1, Math.round(r.h)),
+      })),
+      logo2: logo2Opts,
     });
 
     if (result.error || !result.buffer) return null;

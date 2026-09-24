@@ -65,6 +65,8 @@ export interface CustomXY {
   x: number;
   /** 0–1 oranı (görsel yüksekliğine göre) — ratio modunda kullanılır */
   y: number;
+  /** Sayfa pin'inde logo genişliği, görsel genişliğinin yüzdesi. Yoksa global boyut. */
+  sizePercent?: number;
   /**
    * Konum modu. Varsayılan: 'ratio' (geriye dönük uyumluluk).
    * 'edge-anchor' seçildiğinde offsetXPx/offsetYPx + anchorX/anchorY kullanılır.
@@ -185,6 +187,14 @@ export interface ProcessProgress {
   fileName: string;
   percent: number;
   phase: 'process' | 'zip' | 'write';
+  /** 1-tabanlı bölüm sırası (seri içindeki) */
+  chapterIndex?: number;
+  chapterTotal?: number;
+  /** 1-tabanlı sayfa sırası (bölüm içindeki) */
+  pageInChapter?: number;
+  pageTotalInChapter?: number;
+  /** Tahmini kalan süre (ms) */
+  etaMs?: number;
 }
 
 export interface LogEntry {

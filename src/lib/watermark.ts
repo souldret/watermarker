@@ -67,13 +67,15 @@ export function calcLogoSize(
   logoW: number,
   logoH: number,
   settings: Pick<WatermarkSettings, 'sizeMode' | 'sizePercent' | 'sizePx'>,
+  sizePercentOverride?: number,
 ): { w: number; h: number } {
   const safeLogoW = Math.max(1, logoW);
   const safeLogoH = Math.max(1, logoH);
+  const pct = sizePercentOverride ?? settings.sizePercent;
   const w =
-    settings.sizeMode === 'px'
+    settings.sizeMode === 'px' && sizePercentOverride === undefined
       ? Math.max(1, settings.sizePx)
-      : Math.max(1, (imageW * settings.sizePercent) / 100);
+      : Math.max(1, (imageW * pct) / 100);
   const h = Math.max(1, w * (safeLogoH / safeLogoW));
   return { w, h };
 }
@@ -162,7 +164,7 @@ export function calcLogoRect(
   settings: Pick<WatermarkSettings, 'sizeMode' | 'sizePercent' | 'sizePx' | 'marginPx'> & { customXYMode?: CustomXYMode },
   customXY?: CustomXY | null,
 ): { x: number; y: number; w: number; h: number } {
-  const { w, h } = calcLogoSize(imageW, logoW, logoH, settings);
+  const { w, h } = calcLogoSize(imageW, logoW, logoH, settings, customXY?.sizePercent);
   const m = Math.max(0, settings.marginPx);
 
   if (customXY) {
@@ -484,7 +486,14 @@ export async function applyWatermark(
   return { blob, mime: outMime, ext: outMime === mime ? ext : extFromMime(outMime) };
 }
 
-/** Önizleme canvas'ına watermark'ları çiz (ölçeklenmiş, DPR-aware) */
+function scaleCustomXY(xy: CustomXY, scale: number): CustomXY {
+  if (xy.offsetXPx === undefined && xy.offsetYPx === undefined) return xy;
+  return {
+    ...xy,
+    offsetXPx: (xy.offsetXPx ?? 0) * scale,
+    offsetYPx: (xy.offsetYPx ?? 0) * scale,
+  };
+}
 export function drawPreview(
   canvas: HTMLCanvasElement,
   base: CanvasImageSource,
@@ -496,6 +505,8 @@ export function drawPreview(
   maxW = 220,
   maxH = 280,
   imagePath?: string | null,
+  /** true: uzun şerit ekrana sığdırılmaz, çıktıdaki genişlik oranı korunur */
+  outputScale = false,
 ): void {
   settings = settingsForImage(settings, imagePath);
   if (baseW < 1 || baseH < 1) return;
@@ -503,11 +514,11 @@ export function drawPreview(
   // Sadece genişliğe göre scale hesapla (yükseklik kısıtı yok → uzun görseller bozulmaz)
   // maxH sınırı CSS container'da overflow-y: auto ile handle edilir
   const scaleByW = Math.min(maxW / baseW, 1);
-  // Yine de maxH'dan çok aşırı büyük olmasın: her iki oranı da kontrol et ama
-  // yükseklikle sınırlama yapmak yerine genişlik-öncelikli kullan
-  const scale = baseH * scaleByW > maxH * 4
-    ? Math.min(scaleByW, (maxH * 4) / baseH)  // Çok uzun şeritlerde minimum sınır (4x maxH)
-    : scaleByW;
+  const scale = outputScale
+    ? scaleByW
+    : (baseH * scaleByW > maxH * 4
+      ? Math.min(scaleByW, (maxH * 4) / baseH)
+      : scaleByW);
 
   const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
 
@@ -551,12 +562,11 @@ export function drawPreview(
       ? { ...tw, fontSize: (tw.fontSize || 28) * scale }
       : settings.textWatermark,
     logo2: settings.logo2
-      ? {
-          ...settings.logo2,
-          sizePx: settings.logo2.sizePx * scale,
-          // sizePercent görsel genişliğine göre hesaplandığından scale gerekmez
-        }
+      ? { ...settings.logo2, sizePx: settings.logo2.sizePx * scale }
       : settings.logo2,
+    logo1CustomXY: settings.logo1CustomXY
+      ? scaleCustomXY(settings.logo1CustomXY, scale)
+      : settings.logo1CustomXY,
   };
 
   // Logo 1

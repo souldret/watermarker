@@ -50,10 +50,18 @@ function ProgressPanel() {
 
       {progress && isProcessing && (
         <p className="mt-1.5 truncate text-[11px] text-ink-muted">
-          {phaseLabel}: {progress.chapterName} / {progress.fileName}{' '}
-          <span className="text-ink-text">
-            ({progress.current}/{progress.total})
-          </span>
+          {phaseLabel}
+          {progress.chapterIndex && progress.chapterTotal
+            ? ` · ${t('chapter_progress')} ${progress.chapterIndex}/${progress.chapterTotal}`
+            : ''}
+          {progress.pageInChapter && progress.pageTotalInChapter
+            ? ` · ${t('page_progress')} ${progress.pageInChapter}/${progress.pageTotalInChapter}`
+            : ''}
+          {' · '}
+          <span className="text-ink-text">{progress.fileName}</span>
+          {typeof progress.etaMs === 'number' && progress.etaMs > 1000
+            ? ` · ~${Math.ceil(progress.etaMs / 1000)}s ${t('eta')}`
+            : ''}
         </p>
       )}
 

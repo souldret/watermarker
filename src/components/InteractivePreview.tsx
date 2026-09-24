@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Crosshair, Maximize2, X, MousePointer2, Info } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { buildEdgeAnchorXY, drawPreview, resolveLogo1CustomXY } from '@/lib/watermark';
+import { buildEdgeAnchorXY, calcLogoRect, calcLogo2Rect, drawPreview, resolveLogo1CustomXY } from '@/lib/watermark';
 import { useI18n } from '@/hooks/useI18n';
 import { cn } from '@/lib/utils';
 import type { CustomXY } from '@/lib/types';
@@ -33,17 +33,20 @@ function InteractivePreview() {
   const logo1XY = resolveLogo1CustomXY(settings, previewPath);
   const logo2XY = settings.logo2?.customXY;
 
+  const [outputScale, setOutputScale] = useState(false);
+  const outputScaleRef = useRef(false);
+  outputScaleRef.current = outputScale;
+
   // Hangi logo'yu konumlandırıyoruz
   const [pinTarget, setPinTarget] = useState<'logo1' | 'logo2' | null>(null);
   const [hoverXY, setHoverXY] = useState<{ x: number; y: number } | null>(null);
 
-  // Sürükleme state'i
+  // Sürükleme: konum veya köşeden boyut
   const isDraggingRef = useRef(false);
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  // mouseUp sonrası click event'ini yutmak için flag (double-apply önleme)
+  const dragModeRef = useRef<'move' | 'resize' | null>(null);
   const dragEndedRef = useRef(false);
-  // Sürükleme sırasında ghost önizlemesi (0-1 oranı)
   const [ghostXY, setGhostXY] = useState<{ x: number; y: number } | null>(null);
+  const [ghostSize, setGhostSize] = useState<number | null>(null);
 
   // Container boyutu — sadece ResizeObserver tetiklendiğinde güncellenir.
   // Her paintNow çağrısında getBoundingClientRect() çağırmak layout thrashing'e
@@ -129,7 +132,8 @@ function InteractivePreview() {
     if (isDraggingRef.current && ghostXY) {
       // Sürükleme: crosshair yerine ghost logo kutusu göster
       const logo = pinTarget === 'logo1' ? logoSource : logo2Source;
-      const ghostW = logo ? Math.round(cssW * 0.15) : 40;
+      const pct = (ghostSize ?? (pinTarget === 'logo1' ? settings.sizePercent : settings.logo2?.sizePercent)) || 15;
+      const ghostW = logo ? Math.round(cssW * (pct / 100)) : 40;
       const ghostH = logo ? Math.round(ghostW * (logo.height / Math.max(1, logo.width))) : 24;
       ctx.setLineDash([3, 2]);
       ctx.strokeRect(cx - ghostW / 2, cy - ghostH / 2, ghostW, ghostH);
@@ -148,7 +152,7 @@ function InteractivePreview() {
       ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
-  }, [pinTarget, hoverXY, ghostXY, logoSource, logo2Source]);
+  }, [pinTarget, hoverXY, ghostXY, ghostSize, logoSource, logo2Source, settings.sizePercent, settings.logo2]);
 
   // Çekirdek çizim fonksiyonu — watermark tabanını yeniden hesaplar (ağır).
   // Sadece previewImageUrl/logo/settings değiştiğinde çağrılmalı — hover/ghost
@@ -173,7 +177,11 @@ function InteractivePreview() {
     recalcMaxDims();
     const { maxW, maxH } = maxDimsRef.current;
     try {
-      drawPreview(canvas, img, img.naturalWidth, img.naturalHeight, logoSource, logo2Source, settings, maxW, maxH, previewPath);
+      drawPreview(
+        canvas, img, img.naturalWidth, img.naturalHeight,
+        logoSource, logo2Source, settings, maxW, maxH, previewPath,
+        outputScaleRef.current,
+      );
     } catch {
       // önizleme hatası kritik değil
     }
@@ -182,7 +190,7 @@ function InteractivePreview() {
     else baseSnapshotRef.current = null;
 
     drawOverlay();
-  }, [previewImageUrl, previewPath, logoSource, logo2Source, settings, recalcMaxDims, drawOverlay]);
+  }, [previewImageUrl, previewPath, logoSource, logo2Source, settings, outputScale, recalcMaxDims, drawOverlay]);
 
   // Debounce wrapper — slider gibi hızlı ayar değişimlerinde gereksiz yeniden çizimi önler
   const paint = useCallback(() => {
@@ -260,25 +268,70 @@ function InteractivePreview() {
     return { x: ratio.x, y: ratio.y, mode: 'ratio' };
   }, [customXYMode]);
 
-  /** Konumu uygula */
-  const applyXY = useCallback((ratio: { x: number; y: number }, target: 'logo1' | 'logo2') => {
+  /** Konumu uygula; sizePercent verilirse sayfa pin'ine boyut da yazılır */
+  const applyXY = useCallback((
+    ratio: { x: number; y: number },
+    target: 'logo1' | 'logo2',
+    sizePercent?: number,
+  ) => {
     const xy = buildCustomXY(ratio);
+    if (sizePercent !== undefined) xy.sizePercent = Math.min(100, Math.max(2, Math.round(sizePercent)));
     if (target === 'logo1') setLogo1CustomXY(xy, pinScope);
-    else patchLogo2Settings({ customXY: xy });
+    else patchLogo2Settings({ customXY: xy, ...(sizePercent !== undefined ? { sizePercent: xy.sizePercent, sizeMode: 'percent' as const } : {}) });
   }, [buildCustomXY, setLogo1CustomXY, patchLogo2Settings, pinScope]);
+
+  const currentSizePercent = useCallback((target: 'logo1' | 'logo2') => {
+    if (target === 'logo1') {
+      return pageOverride?.sizePercent ?? settings.sizePercent;
+    }
+    return settings.logo2?.sizePercent ?? 10;
+  }, [pageOverride, settings.sizePercent, settings.logo2]);
+
+  /** Köşe tutamacı: çizilen logonun sağ-altı (önizleme oranında) */
+  const handleCorner = useCallback((target: 'logo1' | 'logo2', center: { x: number; y: number }) => {
+    const img = imgRef.current;
+    const canvas = canvasRef.current;
+    if (!img || !canvas) return { x: Math.min(1, center.x + 0.08), y: Math.min(1, center.y + 0.08) };
+    const cssW = parseFloat(canvas.style.width) || canvas.width;
+    const cssH = parseFloat(canvas.style.height) || canvas.height;
+    const logo = target === 'logo1' ? logoSource : logo2Source;
+    if (!logo || cssW < 1 || cssH < 1) return { x: center.x, y: center.y };
+    const sized = target === 'logo1'
+      ? calcLogoRect(cssW, cssH, logo.width, logo.height, 'mc', {
+          ...settings,
+          marginPx: 0,
+          sizePercent: currentSizePercent('logo1'),
+          sizeMode: pageOverride?.sizePercent ? 'percent' : settings.sizeMode,
+        }, { x: center.x, y: center.y, mode: 'ratio' })
+      : calcLogo2Rect(cssW, cssH, logo.width, logo.height, 'mc', {
+          ...settings.logo2,
+          sizePercent: currentSizePercent('logo2'),
+          customXY: { x: center.x, y: center.y, mode: 'ratio' },
+        }, 0);
+    return {
+      x: Math.min(1, (sized.x + sized.w) / cssW),
+      y: Math.min(1, (sized.y + sized.h) / cssH),
+    };
+  }, [currentSizePercent, logoSource, logo2Source, pageOverride, settings]);
+
+  const nearCorner = (ratio: { x: number; y: number }, corner: { x: number; y: number }) => {
+    return Math.hypot(ratio.x - corner.x, ratio.y - corner.y) < 0.045;
+  };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
     const ratio = relativeXY(e);
     if (!ratio) return;
+    const center = pinTarget === 'logo1' ? logo1XY : logo2XY;
+    const corner = center ? handleCorner(pinTarget, center) : null;
+    dragModeRef.current = corner && nearCorner(ratio, corner) ? 'resize' : 'move';
     isDraggingRef.current = true;
-    dragStartRef.current = ratio;
-    setGhostXY(ratio);
-    e.preventDefault(); // Metin seçimini engelle
+    setGhostXY(center ? { x: center.x, y: center.y } : ratio);
+    setGhostSize(null);
+    e.preventDefault();
   };
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Sürükleme bittiyse click event'ini yut (mouseUp zaten applyXY yaptı)
     if (dragEndedRef.current) {
       dragEndedRef.current = false;
       return;
@@ -293,9 +346,6 @@ function InteractivePreview() {
     setGhostXY(null);
   };
 
-  // mousemove native olarak saniyede 60-100+ kez tetiklenebilir — rAF ile
-  // throttle edilerek React state güncellemeleri (ve dolayısıyla re-render'lar)
-  // tarayıcının çizim döngüsüyle sınırlanır (aşırı re-render önlenir).
   const moveFrameRef = useRef(0);
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget) return;
@@ -304,10 +354,16 @@ function InteractivePreview() {
     if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
     moveFrameRef.current = requestAnimationFrame(() => {
       moveFrameRef.current = 0;
-      if (isDraggingRef.current) {
-        setGhostXY(xy);
-      } else {
+      if (!isDraggingRef.current) {
         setHoverXY(xy);
+        return;
+      }
+      if (dragModeRef.current === 'resize') {
+        const center = ghostXY || (pinTarget === 'logo1' ? logo1XY : logo2XY);
+        if (!center) return;
+        const dx = Math.abs(xy.x - center.x) * 2;
+        setGhostSize(Math.min(100, Math.max(2, Math.round(dx * 100))));
+        return;
       }
     });
   };
@@ -315,23 +371,33 @@ function InteractivePreview() {
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!pinTarget || !isDraggingRef.current) return;
     const ratio = relativeXY(e);
+    const mode = dragModeRef.current;
+    const centerNow = ghostXY || (pinTarget === 'logo1' ? logo1XY : logo2XY);
     isDraggingRef.current = false;
-    dragStartRef.current = null;
-    dragEndedRef.current = true; // click event'ini yutmak için
+    dragModeRef.current = null;
+    dragEndedRef.current = true;
     setGhostXY(null);
-    if (ratio) {
-      applyXY(ratio, pinTarget);
-      setPinTarget(null);
-      setHoverXY(null);
+    setGhostSize(null);
+    if (!ratio) return;
+    if (mode === 'resize') {
+      const center = centerNow || ratio;
+      const dx = Math.abs(ratio.x - center.x) * 2;
+      const size = Math.min(100, Math.max(2, Math.round(dx * 100)));
+      applyXY({ x: center.x, y: center.y }, pinTarget, size);
+    } else {
+      applyXY(ratio, pinTarget, pinScope === 'page' && pinTarget === 'logo1' ? (pageOverride?.sizePercent ?? settings.sizePercent) : undefined);
     }
+    setPinTarget(null);
+    setHoverXY(null);
   };
 
   const handleMouseLeave = () => {
     setHoverXY(null);
-    // Sürükleme varsa ghost'u sıfırla ama pin'i koru
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
+      dragModeRef.current = null;
       setGhostXY(null);
+      setGhostSize(null);
     }
   };
 
@@ -399,6 +465,20 @@ function InteractivePreview() {
               {pinTarget === 'logo2' ? t('click_to_place') : t('pin_logo2')}
             </button>
           )}
+          {hasLogo1 && (
+            <button
+              type="button"
+              onClick={() => setOutputScale((v) => !v)}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition',
+                outputScale
+                  ? 'border-emerald-400 bg-emerald-400/15 text-emerald-300'
+                  : 'border-ink-border bg-ink-deep text-ink-muted hover:border-emerald-400/40',
+              )}
+            >
+              {outputScale ? t('preview_output_on') : t('preview_output')}
+            </button>
+          )}
           {/* Serbest konumları sıfırla */}
           {(logo1XY || logo2XY) && (
             <button
@@ -427,7 +507,7 @@ function InteractivePreview() {
         )}>
           <Crosshair className="h-3.5 w-3.5" />
           {pinTarget === 'logo1'
-            ? (pinScope === 'page' ? t('pin_this_page_hint') : t('pin_logo1_hint'))
+            ? (pinScope === 'page' ? t('pin_page_size_hint') : t('resize_hint'))
             : t('pin_logo2_hint')}
         </div>
       )}

@@ -99,9 +99,14 @@ describe('canUseElectronSharp', () => {
     expect(canUseElectronSharp(DEFAULT_SETTINGS, false)).toBe(true);
   });
 
-  it('customXY veya 2. logo veya metin → false', () => {
-    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, logo1CustomXY: { x: 0.5, y: 0.5 } }, false)).toBe(false);
-    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, logo2: { ...DEFAULT_SETTINGS.logo2, enabled: true } }, true)).toBe(false);
+  it('döndürme, ikinci logo ve serbest konum da sharp kullanır', () => {
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, rotation: 30 }, false)).toBe(true);
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, logo1CustomXY: { x: 0.5, y: 0.5 } }, false)).toBe(true);
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, logo2: { ...DEFAULT_SETTINGS.logo2, enabled: true } }, true)).toBe(true);
+  });
+
+  it('akıllı konum veya metin watermark → false', () => {
+    expect(canUseElectronSharp({ ...DEFAULT_SETTINGS, smartPosition: true }, false)).toBe(false);
     expect(canUseElectronSharp({
       ...DEFAULT_SETTINGS,
       textWatermark: { ...DEFAULT_SETTINGS.textWatermark, enabled: true },

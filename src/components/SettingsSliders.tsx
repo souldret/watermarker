@@ -85,7 +85,7 @@ export default function SettingsSliders() {
           label="Logo boyutu"
           valueLabel={`%${settings.sizePercent}`}
           min={1}
-          max={60}
+          max={100}
           value={settings.sizePercent}
           onChange={setSizePercent}
         />
@@ -119,8 +119,8 @@ export default function SettingsSliders() {
       <SliderRow
         label="Döndürme"
         valueLabel={`${settings.rotation}°`}
-        min={-45}
-        max={45}
+        min={-180}
+        max={180}
         value={settings.rotation}
         onChange={setRotation}
       />
