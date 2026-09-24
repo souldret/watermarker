@@ -126,7 +126,7 @@ async function processJob(req: WatermarkWorkerRequest): Promise<{ buffer: ArrayB
     if (!ctx) throw new Error('OffscreenCanvas 2d context alınamadı');
 
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'medium';
     ctx.drawImage(imageBitmap, 0, 0);
 
     const ctx2d = ctx as unknown as CanvasRenderingContext2D;

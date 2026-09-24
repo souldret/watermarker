@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased] — 2026-09-24
+
+### Hata Düzeltmeleri
+- **Animasyonlu WebP:** Ham "ANIM" taraması piksel verisinde yanlış pozitif üretiyordu. Artık RIFF/WEBP + VP8X animasyon bayrağı ve 4-hizalı ANIM chunk aranıyor.
+- **Worker havuzu:** Zaman aşımı veya çökmede worker havuza geri dönüyordu ve sonraki işler de kilitleniyordu. Bozuk worker kapatılıp logosu yüklü yenisiyle değiştiriliyor; kapanışta bekleyen kuyruk reddediliyor.
+
+### Performans
+- Toplu encode `imageSmoothingQuality: medium`, önizleme `low`. `high` büyük şeritlerde encode'u gereksiz yavaşlatıyordu.
+
+---
+
 ## [Unreleased] — 2026-09-17
 
 ### UI

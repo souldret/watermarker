@@ -88,12 +88,24 @@ describe('isAnimatedWebp', () => {
   });
 
   it('ANIM chunk içeren webp header → true', async () => {
-    const buf = new Uint8Array(60);
+    const buf = new Uint8Array(64);
     buf.set([82, 73, 70, 70], 0);
     buf.set([87, 69, 66, 80], 8);
-    buf.set([65, 78, 73, 77], 30);
+    buf.set([86, 80, 56, 88], 12); // VP8X
+    buf[20] = 0x02; // animation flag
+    buf.set([65, 78, 73, 77], 32); // ANIM, 4-aligned
     const file = new File([new Blob([buf])], 'anim.webp', { type: 'image/webp' });
     expect(await isAnimatedWebp(file)).toBe(true);
+  });
+
+  it('piksel verisindeki ANIM kelimesi false positive üretmez', async () => {
+    const buf = new Uint8Array(64);
+    buf.set([82, 73, 70, 70], 0);
+    buf.set([87, 69, 66, 80], 8);
+    buf.set([86, 80, 56, 32], 12); // VP8 (statik)
+    buf.set([65, 78, 73, 77], 31); // hizasız, bayrak yok
+    const file = new File([buf], 'still.webp', { type: 'image/webp' });
+    expect(await isAnimatedWebp(file)).toBe(false);
   });
 
   it('statik webp header → false', async () => {

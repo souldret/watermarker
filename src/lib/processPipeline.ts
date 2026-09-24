@@ -86,9 +86,11 @@ function cloneArrayBuffer(src: ArrayBuffer): ArrayBuffer {
 class WorkerPool {
   private workers: Worker[] = [];
   private idle: Worker[] = [];
-  private queue: Array<{ resolve: (w: Worker) => void }> = [];
+  private queue: Array<{ resolve: (w: Worker) => void; reject: (err: Error) => void }> = [];
   private terminated = false;
   private readonly timeoutMs: number;
+  private readonly workerUrl: string | URL;
+  private readonly logos?: { logo1: ArrayBuffer | null; logo2: ArrayBuffer | null };
   private readonly ready: Promise<boolean>;
 
   constructor(
@@ -98,43 +100,53 @@ class WorkerPool {
     timeoutMs = 90_000,
   ) {
     this.timeoutMs = timeoutMs;
+    this.workerUrl = workerUrl;
+    this.logos = logos;
     const readyWaits: Promise<boolean>[] = [];
     for (let i = 0; i < size; i++) {
-      const w = new Worker(workerUrl, { type: 'module' });
-      if (logos && (logos.logo1 || logos.logo2)) {
-        readyWaits.push(
-          new Promise<boolean>((resolve) => {
-            let done = false;
-            const finish = (ok: boolean) => {
-              if (done) return;
-              done = true;
-              clearTimeout(timer);
-              w.removeEventListener('message', onReady);
-              resolve(ok);
-            };
-            const onReady = (e: MessageEvent<{ type?: string }>) => {
-              if (e.data?.type === 'ready') finish(true);
-            };
-            const timer = setTimeout(() => finish(false), 5000);
-            w.addEventListener('message', onReady);
-            const init: WatermarkWorkerInit = {
-              type: 'init',
-              logo1Buffer: logos.logo1 ? cloneArrayBuffer(logos.logo1) : null,
-              logo2Buffer: logos.logo2 ? cloneArrayBuffer(logos.logo2) : null,
-            };
-            const transfer: Transferable[] = [];
-            if (init.logo1Buffer) transfer.push(init.logo1Buffer);
-            if (init.logo2Buffer) transfer.push(init.logo2Buffer);
-            w.postMessage(init, transfer);
-          }),
-        );
-      }
-      this.workers.push(w);
+      const w = this.spawn(false);
+      readyWaits.push(this.initWorker(w));
       this.idle.push(w);
     }
     this.ready = readyWaits.length
       ? Promise.all(readyWaits).then((flags) => flags.every(Boolean))
       : Promise.resolve(true);
+  }
+
+  private spawn(pushIdle: boolean): Worker {
+    const w = new Worker(this.workerUrl, { type: 'module' });
+    this.workers.push(w);
+    if (pushIdle) this.idle.push(w);
+    return w;
+  }
+
+  private initWorker(w: Worker): Promise<boolean> {
+    const logos = this.logos;
+    if (!logos || (!logos.logo1 && !logos.logo2)) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      let done = false;
+      const finish = (ok: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        w.removeEventListener('message', onReady);
+        resolve(ok);
+      };
+      const onReady = (e: MessageEvent<{ type?: string }>) => {
+        if (e.data?.type === 'ready') finish(true);
+      };
+      const timer = setTimeout(() => finish(false), 5000);
+      w.addEventListener('message', onReady);
+      const init: WatermarkWorkerInit = {
+        type: 'init',
+        logo1Buffer: logos.logo1 ? cloneArrayBuffer(logos.logo1) : null,
+        logo2Buffer: logos.logo2 ? cloneArrayBuffer(logos.logo2) : null,
+      };
+      const transfer: Transferable[] = [];
+      if (init.logo1Buffer) transfer.push(init.logo1Buffer);
+      if (init.logo2Buffer) transfer.push(init.logo2Buffer);
+      w.postMessage(init, transfer);
+    });
   }
 
   waitUntilReady(): Promise<boolean> {
@@ -153,6 +165,7 @@ class WorkerPool {
           if (this.terminated) reject(new Error('Worker pool kapandı'));
           else resolve(w);
         },
+        reject,
       });
     });
   }
@@ -173,24 +186,25 @@ class WorkerPool {
     const worker = await this.acquire();
     return new Promise<WatermarkWorkerResponse>((resolve, reject) => {
       let settled = false;
-      const finish = (fn: () => void) => {
+      const finish = (fn: () => void, dropWorker: boolean) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         worker.removeEventListener('error', errHandler);
-        this.release(worker);
+        if (dropWorker) this.drop(worker);
+        else this.release(worker);
         fn();
       };
       const handler = (e: MessageEvent<WatermarkWorkerResponse & { type?: string }>) => {
         if (!e.data || e.data.type === 'ready' || e.data.jobId !== req.jobId) return;
-        finish(() => resolve(e.data));
+        finish(() => resolve(e.data), false);
       };
       const errHandler = (e: ErrorEvent) => {
-        finish(() => reject(new Error(e.message || 'Worker crash')));
+        finish(() => reject(new Error(e.message || 'Worker crash')), true);
       };
       const timer = setTimeout(() => {
-        finish(() => reject(new Error('Worker zaman aşımı')));
+        finish(() => reject(new Error('Worker zaman aşımı')), true);
       }, this.timeoutMs);
       worker.addEventListener('message', handler);
       worker.addEventListener('error', errHandler);
@@ -201,13 +215,28 @@ class WorkerPool {
     });
   }
 
+  /** Bozuk worker'ı kapat, yerine logosu yüklü yenisini koy (havuz küçülmesin) */
+  private drop(w: Worker): void {
+    try {
+      w.terminate();
+    } catch {
+      /* ignore */
+    }
+    this.workers = this.workers.filter((x) => x !== w);
+    this.idle = this.idle.filter((x) => x !== w);
+    if (this.terminated) return;
+    const fresh = this.spawn(false);
+    void this.initWorker(fresh).then(() => this.release(fresh));
+  }
+
   /** Tüm worker'ları kapat */
   terminate(): void {
     this.terminated = true;
+    const waiting = this.queue.splice(0);
+    for (const item of waiting) item.reject(new Error('Worker pool kapandı'));
     for (const w of this.workers) w.terminate();
     this.workers = [];
     this.idle = [];
-    this.queue = [];
   }
 }
 

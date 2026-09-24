@@ -13,7 +13,7 @@ import type { LogoSource } from '../watermark';
 function makeCtxMock() {
   return {
     imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high',
+    imageSmoothingQuality: 'medium',
     globalAlpha: 1,
     fillStyle: '#000',
     font: '',

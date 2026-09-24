@@ -415,7 +415,7 @@ export async function applyWatermark(
   }
 
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingQuality = 'medium';
   ctx.drawImage(image, 0, 0);
 
   // — Logo 1 —
@@ -536,7 +536,7 @@ export function drawPreview(
 
   // Kalite ayarları
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingQuality = 'low';
 
   ctx.clearRect(0, 0, cssW, cssH);
   ctx.drawImage(base, 0, 0, cssW, cssH);

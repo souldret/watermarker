@@ -78,14 +78,29 @@ async function readFileHeader(file: Blob, maxBytes: number): Promise<Uint8Array>
 }
 
 /**
- * Animasyonlu WebP tespiti — VP8X/ANIM chunk'ı header'da ara.
+ * Animasyonlu WebP tespiti — VP8X bayrağı + hizalı ANIM chunk.
+ * Ham "ANIM" taraması piksel verisinde yanlış pozitif üretir; FourCC 4'ün
+ * katı ofsette olmalı ve VP8X animasyon bayrağı (byte 20, bit 1) açık olmalı.
  * Tüm dosyayı okumaz (uzun şeritlerde maliyetli).
  */
 export async function isAnimatedWebp(file: File): Promise<boolean> {
   if (!/\.webp$/i.test(file.name)) return false;
   try {
     const bytes = await readFileHeader(file, 512);
-    for (let i = 0; i < bytes.length - 3; i++) {
+    if (bytes.length < 21) return false;
+    // RIFF....WEBP
+    if (
+      bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46 ||
+      bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50
+    ) {
+      return false;
+    }
+    // VP8X flags: animasyon biti
+    const isVp8x =
+      bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x58;
+    if (!isVp8x || (bytes[20] & 0x02) === 0) return false;
+
+    for (let i = 12; i <= bytes.length - 8; i += 4) {
       if (bytes[i] === 65 && bytes[i + 1] === 78 && bytes[i + 2] === 73 && bytes[i + 3] === 77) {
         return true;
       }
